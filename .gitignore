@@ -1,0 +1,4 @@
+.env
+FoundryVTT/vtt/*
+downloads/*
+backups/*

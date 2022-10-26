@@ -1,0 +1,9 @@
+# Remove all comments for .env
+#
+# Public ports for Internet or Load balance proxy
+NGINX_PROD_PORT=8043
+NGINX_DEV_PORT=9043
+
+# Virtual Table Top name
+VTT_NAME=FoundryVTT
+DOMAIN=dndregio.tk

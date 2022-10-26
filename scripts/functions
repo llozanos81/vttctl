@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+function stop() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml stop
+    docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml stop
+}
+
+function getLogs() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs
+}
+
+function liveLogs() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs -f
+}
+
+function getVersion() {
+    RESPONSE=/tmp/.response.txt
+    rm -rf $RESPONSE
+    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
+    if [ $status == 200 ]; then
+        cat $RESPONSE
+    else
+        echo "{ 'active': 'false' }"
+    fi
+}
+
+function appReload() {
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    docker exec -d $CONT_NAME touch /home/foundry/vtt/reload.txt
+}
+
+function prodBackup()  {
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    json=$(getVersion)
+    if jq -e . >/dev/null 2>&1 <<<"$json"; then
+        PROD_VER=$(echo $json | jq -r .version)
+        if [ 1 -eq "$(echo "${PROD_VER} > 0" | bc)" ]; then
+            DATESTAMP=$(date +"%Y%m%d")
+            docker run \
+                --rm \
+                --volumes-from $CONT_NAME \
+                -v $(pwd)/backups/:/backup \
+                busybox \
+                tar -cvjf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar.bz2 -C / home/foundry/userdata
+        fi
+    fi
+}
+
+function prodLatestRestore() {
+    REST_FILE=$(ls -t backups/*bz2 | head -1)
+    FILE_NAME=$(basename ${REST_FILE})
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    
+    docker run \
+                --rm \
+                --volumes-from $CONT_NAME \
+                -v $(pwd)/backups/:/backup \
+                busybox \
+                tar -xvf /backup/${FILE_NAME} -C /
+
+}
+
+function devLatestRestore() {
+    REST_FILE=$(ls -t backups/*bz2 | head -1)
+    FILE_NAME=$(basename ${REST_FILE})
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep dev | awk '{print $1}')
+    
+    docker run \
+                --rm \
+                --volumes-from $CONT_NAME \
+                -v $(pwd)/backups/:/backup \
+                busybox \
+                tar -xvf /backup/${FILE_NAME} -C /
+
+}

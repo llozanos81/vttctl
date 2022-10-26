@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+    app:
+      restart: unless-stopped
+      image: foundryvtt:latest
+      volumes:
+       - UserData:/home/foundry/userdata
+      networks:
+       - internal_B
+    web:
+      image: nginx:alpine
+      restart: unless-stopped
+      volumes:
+        - ./nginx/foundry.conf:/etc/nginx/templates/default.conf.template:ro
+      ports:
+        - "${NGINX_DEV_PORT}:80/tcp"
+      networks:
+       - internal_B
+
+volumes:
+    UserData:
+
+networks:
+    internal_B:
