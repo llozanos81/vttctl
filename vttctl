@@ -9,6 +9,7 @@ DESC=Environment
 PROD_PROJECT="${NAME}_PROD"
 DEV_PROJECT="${NAME}_DEV"
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
+TAG=${DEFAULT_VER}
 
 # Source function library.
 if ! [ -x "/lib/lsb/init-functions" ]; then
@@ -32,8 +33,8 @@ fi
 case "$1" in
   start)
         log_daemon_msg "Starting $DESC" "$NAME"
-        docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
-        docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
+        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
         log_end_msg $?
         ;;
   stop)
@@ -46,14 +47,69 @@ case "$1" in
         ;;
   clean)
         $0 stop
-        docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
-        docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
-        docker rmi foundryvtt:latest
+        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
+        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
   build)
         log_daemon_msg "Building $DESC" "$NAME"
-        cp FoundryVTT/docker-entrypoint.sh FoundryVTT/vtt/
-        docker build -t foundryvtt:latest -f ./FoundryVTT/Dockerfile ./FoundryVTT
+        VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
+            OPT=""
+            while [[ $OPT != "0" ]]; do
+            echo "Choose version to build ('0' to cancel):"
+            count=1
+            for VER in $VERSIONS; do
+                  echo "$count) $VER"
+                  ((count++))
+            done
+
+            read -p "Version to build?: " OPT
+
+            if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
+                  BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+                        matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
+                        if [ -z "$matching_images" ]; then
+                              echo "Image 'foundryvtt:$BUILD_VER' not found, building."
+                        else
+                           read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
+
+                              # Process user's confirmation
+                              if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
+                                    # Delete matching images
+                                    docker rmi $matching_images
+                                    echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
+                              else
+                                    echo "Image building cancelled."
+                                    exit
+                              fi
+                        fi
+
+
+                  for EX in $VERSIONS; do
+                        if [[ "$EX" != "$BUILD_VER" ]]; then
+                              exclude+=($EX)
+                        fi
+                  done
+
+                  rm FoundryVTT/.dockerignore
+                  echo "${exclude[@]}" > FoundryVTT/.dockerignore
+
+                  MAJOR_VER="${BUILD_VER%%.*}"
+                  foundry_version="^${MAJOR_VER}\..*"
+                  ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
+
+
+                  echo "Building version: $BUILD_VER"
+                  cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
+                  docker build --build-arg BUILD_VER=$BUILD_VER --build-arg ALPINE_VER=$ALPINE_VER \
+                         -t foundryvtt:$BUILD_VER \
+                         -f ./FoundryVTT/Dockerfile ./FoundryVTT
+                  break
+            elif [[ $OPT != "0" ]]; then
+                  echo "Invalid option."
+            fi
+            done
+        exit
+
         log_end_msg $?
         ;;
   rebuild)
@@ -116,7 +172,18 @@ case "$1" in
         devLatestRestore
         $0 reload
         log_end_msg $?      
-        ;;        
+        ;;
+  fix)
+        log_daemon_msg "Fixing permissions for Foundry VTT."
+        fixOnwer
+        #$0 reload
+        log_end_msg $?      
+        ;;
+  default)
+        log_daemon_msg "Setting default version of Foundry VTT."
+        
+        log_end_msg $?      
+        ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
             U_EXPIRES=$(echo $2 | awk -F= '{print $4}')

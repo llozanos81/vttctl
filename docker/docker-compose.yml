@@ -7,12 +7,12 @@ services:
       environment:
           - PORT=3000
       ports:
-        - "3000:3000/tcp"          
+        - "3000:3000/tcp"
       networks:
-       - internal_A          
+       - internal_A
     app:
       restart: unless-stopped
-      image: foundryvtt:latest
+      image: foundryvtt:${TAG:-latest}
       volumes:
        - UserData:/home/foundry/userdata
       networks:
@@ -29,6 +29,6 @@ services:
 
 volumes:
     UserData:
-    
+
 networks:
     internal_A:

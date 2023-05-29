@@ -41,7 +41,8 @@ function prodBackup()  {
                 --volumes-from $CONT_NAME \
                 -v $(pwd)/backups/:/backup \
                 busybox \
-                tar -cvjf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar.bz2 -C / home/foundry/userdata
+                tar -cvjf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar.bz2 \
+                    -C / home/foundry/userdata
         fi
     fi
 }
@@ -72,4 +73,9 @@ function devLatestRestore() {
                 busybox \
                 tar -xvf /backup/${FILE_NAME} -C /
 
+}
+
+function fixOnwer() {
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    docker run --rm --volumes-from ${CONT_NAME} busybox chown 100:101 -R /home/foundry/userdata
 }

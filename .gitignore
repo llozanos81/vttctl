@@ -1,4 +1,3 @@
 .env
-FoundryVTT/vtt/*
 downloads/*
-backups/*
+backups/*.bz2

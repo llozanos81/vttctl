@@ -2,7 +2,9 @@
 # usage:
 # ./prestage.sh "TIMED_DOWNLOAD_URL"
 DEST="FoundryVTT"
-TARGET="${DEST}/vtt"
+VERSION=$(echo "$1" | grep -oP "(?<=releases\/)\d+\.\d+")
+TARGET="${DEST}/${VERSION}"
+
 
 #rm -rf .env ${TARGET}
 FILE=$(basename "$1" | awk -F\? {'print $1'})

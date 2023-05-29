@@ -1,6 +1,8 @@
-FROM alpine:3.16
+ARG ALPINE_VER
+FROM alpine:$ALPINE_VER
+ARG BUILD_VER
 WORKDIR /home/foundry/vtt
-COPY ./vtt/ .
+COPY ./$BUILD_VER/ .
 RUN set -xe \
     && export \
     && addgroup -S foundry \

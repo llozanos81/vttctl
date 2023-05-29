@@ -1,0 +1,14 @@
+{
+    "foundryvtt": [
+      {
+        "version": "10.xxx",
+        "nodejs": "16.13.x",
+        "alpine": "3.16"
+      },
+      {
+        "version": "11.xxx",
+        "nodejs": "18.x.x",
+        "alpine": "3.18"
+      }
+    ]
+  }
