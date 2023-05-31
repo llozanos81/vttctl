@@ -6,7 +6,7 @@ NGINX_DEV_PORT=9043
 
 # Virtual Table Top name
 VTT_NAME=FoundryVTT
-DOMAIN=dndregio.tk
+DOMAIN=legendaryrealms.com.mx
 
 # Backups
 TAR_EXCLUSIONS="{'*.jpg','*.jpeg','*.png','*.PNG','*.webp','*.eot','*.woff*','*.gif','*.webm','*.ogg','*.mp3','*.mp4','*.mpg'}"

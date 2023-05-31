@@ -55,14 +55,21 @@ case "$1" in
         VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
             OPT=""
             while [[ $OPT != "0" ]]; do
-            echo "Choose version to build ('0' to cancel):"
-            count=1
-            for VER in $VERSIONS; do
-                  echo "$count) $VER"
-                  ((count++))
-            done
+                  word_count=$(echo "$VERSIONS" | wc -w)
 
-            read -p "Version to build?: " OPT
+                  if [[ $word_count -gt 1 ]]; then
+                        echo "Choose version to build ('0' to cancel):"
+                        count=1
+
+                        for VER in $VERSIONS; do
+                              echo "$count) $VER"
+                              ((count++))
+                        done
+                        read -p "Version to build?: " OPT
+                  else 
+                        OPT=$VERSIONS
+                  fi
+
 
             if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
                   BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
