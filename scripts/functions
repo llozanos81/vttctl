@@ -39,37 +39,37 @@ function prodBackup()  {
             docker run \
                 --rm \
                 --volumes-from $CONT_NAME \
-                -v $(pwd)/backups/:/backup \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
-                tar -cvjf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar.bz2 \
+                tar -cvf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar \
                     -C / home/foundry/userdata
         fi
     fi
 }
 
 function prodLatestRestore() {
-    REST_FILE=$(ls -t backups/*bz2 | head -1)
+    REST_FILE=$(ls -t backups/*tar | head -1)
     FILE_NAME=$(basename ${REST_FILE})
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
     
     docker run \
                 --rm \
                 --volumes-from $CONT_NAME \
-                -v $(pwd)/backups/:/backup \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
                 tar -xvf /backup/${FILE_NAME} -C /
 
 }
 
 function devLatestRestore() {
-    REST_FILE=$(ls -t backups/*bz2 | head -1)
+    REST_FILE=$(ls -t backups/*tar | head -1)
     FILE_NAME=$(basename ${REST_FILE})
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep dev | awk '{print $1}')
     
     docker run \
                 --rm \
                 --volumes-from $CONT_NAME \
-                -v $(pwd)/backups/:/backup \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
                 tar -xvf /backup/${FILE_NAME} -C /
 

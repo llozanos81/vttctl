@@ -34,7 +34,9 @@ case "$1" in
   start)
         log_daemon_msg "Starting $DESC" "$NAME"
         TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
-        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+        if [ "$DEV_ENABLED" == "true" ]; then
+            TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+        fi
         log_end_msg $?
         ;;
   stop)
@@ -47,6 +49,7 @@ case "$1" in
         ;;
   clean)
         $0 stop
+        echo "Deleting FoundryVTT containers ..."
         TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
         TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
