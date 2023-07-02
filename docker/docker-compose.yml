@@ -15,6 +15,7 @@ services:
       image: foundryvtt:${TAG:-latest}
       volumes:
        - UserData:/home/foundry/userdata
+       - /home/ubuntu/sites/legendaryrealms.com.mx/backups/FoundryVTT:/home/foundry/vtt/resources/app/public/backups/
       networks:
        - internal_A
     web:

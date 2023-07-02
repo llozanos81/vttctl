@@ -46,6 +46,10 @@ case "$1" in
         stop
         log_end_msg $?
         ;;
+  attach)
+        APP_CONTAINER=$(docker container ls -a | grep vtt | grep app | awk '{print $1}')
+        docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT app container ...;ash"
+        ;;
   logs)
         getLogs
         ;;
