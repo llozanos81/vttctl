@@ -75,7 +75,6 @@ case "$1" in
                         OPT=$VERSIONS
                   fi
 
-
             if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
                   BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
                         matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
@@ -121,8 +120,7 @@ case "$1" in
                   echo "Invalid option."
             fi
             done
-        exit
-
+            exit
         log_end_msg $?
         ;;
   rebuild)
@@ -193,9 +191,38 @@ case "$1" in
         log_end_msg $?      
         ;;
   default)
-        log_daemon_msg "Setting default version of Foundry VTT."
-        
-        log_end_msg $?      
+        log_daemon_msg "Setting default version of Foundry VTT. (Current $DEFAULT_VER)"
+        VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+        OPT=""
+        while [[ $OPT != "0" ]]; do
+              word_count=$(echo "$VERSIONS" | wc -w)
+              if [[ $word_count -gt 1 ]]; then
+                  echo "Choose version to build ('0' to cancel):"
+                  count=1
+
+                  for VER in $VERSIONS; do
+                        if [ $VER == $DEFAULT_VER ]; then
+                              echo -e "$count) \e[1;32m$VER\e[0m"
+                        else
+                              echo "$count) $VER"
+                        fi
+                        ((count++))
+                  done
+                  read -p "Version to set as default?: " OPT
+              else 
+                  OPT=$VERSIONS
+              fi
+
+            if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
+                  NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+                  sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
+                  echo "New default version is $NEW_DEFAULT_VER."
+                  exit
+            elif [[ $OPT != "0" ]]; then
+                  echo "Invalid option."
+            fi
+        done       
+        exit      
         ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 

@@ -41,7 +41,7 @@ function prodBackup()  {
                 --volumes-from $CONT_NAME \
                 -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
-                sh -c " \
+                ash -c " \
                 tar -cvf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar \
                     -C / home/foundry/userdata \
                 ; chown $UID:$GID /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar"
