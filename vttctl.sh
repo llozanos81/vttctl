@@ -214,6 +214,10 @@ case "$1" in
             echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\""
         fi
         ;;
+  monitor)
+            CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+            docker exec -it $CONT_NAME pm2 monit
+        ;;
   cleanup)
       DIR_VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
       IMG_VERSIONS=$(docker images -a | grep vtt | awk {'print $1":"$2'})

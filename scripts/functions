@@ -26,7 +26,7 @@ function getVersion() {
 
 function appReload() {
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
-    docker exec -d $CONT_NAME touch /home/foundry/vtt/reload.txt
+    docker exec -d $CONT_NAME pm2 restart VTT
 }
 
 function prodBackup()  {
@@ -77,5 +77,5 @@ function devLatestRestore() {
 
 function fixOnwer() {
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
-    docker run --rm --volumes-from ${CONT_NAME} busybox chown 100:101 -R /home/foundry/userdata
+    docker run --rm --volumes-from ${CONT_NAME} busybox chown 3000:3000 -R /home/foundry/userdata
 }
