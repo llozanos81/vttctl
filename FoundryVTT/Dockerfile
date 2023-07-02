@@ -18,6 +18,7 @@ RUN set -xe \
     && apk add --no-cache --update nodejs icu-data-full \
     && apk add --no-cache --update npm tzdata \
     && npm install pm2 -g \
+    && apk del --no-cache npm \
     && chown foundry:foundry -R /home/foundry/vtt \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
     && mkdir -p /home/foundry/userdata \

@@ -10,6 +10,8 @@ PROD_PROJECT="${NAME}_PROD"
 DEV_PROJECT="${NAME}_DEV"
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
+GID=$(getent passwd $USER | awk -F: '{print $4}')
+
 
 # Source function library.
 if ! [ -x "/lib/lsb/init-functions" ]; then
@@ -187,7 +189,7 @@ case "$1" in
   fix)
         log_daemon_msg "Fixing permissions for Foundry VTT."
         fixOnwer
-        #$0 reload
+        $0 reload
         log_end_msg $?      
         ;;
   default)
@@ -271,7 +273,7 @@ case "$1" in
                   echo "Deleting extracted folder ..."
                   rm -rf FoundryVTT/$DEL_VER/
                   echo "Deleting Docker image ..."
-                  docker images rmi foundryvtt:$DEL_VER
+                  docker image rm foundryvtt:$DEL_VER
                   echo "Cleaning completed."
             else
                   echo "Cleaning cancelled."
@@ -284,7 +286,7 @@ case "$1" in
       done
       ;;
   *)
-        log_failure_msg "Usage: $N {start|stop|logs|clean|cleanup|build|rebuild|status|restart|reload|force-reload}"
+        log_failure_msg "Usage: $N {start|stop|logs|clean|cleanup|build|rebuild|status|monitor|restart|reload|force-reload}"
         exit 1
         ;;
 esac
