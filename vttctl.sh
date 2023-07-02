@@ -84,6 +84,7 @@ case "$1" in
 
                               # Process user's confirmation
                               if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
+                                    $0 clean
                                     # Delete matching images
                                     docker rmi $matching_images
                                     echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
