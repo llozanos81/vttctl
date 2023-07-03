@@ -15,6 +15,10 @@ services:
       image: foundryvtt:${TAG:-latest}
       volumes:
        - UserData:/home/foundry/userdata
+       - shared_jb2a_patreon:/home/foundry/userdata/Data/modules/jb2a_patreon
+       - shared_ivan-duch-music-packs:/home/foundry/userdata/Data/modules/ivan-duch-music-packs/
+       - shared_tabletop-rpg-music:/home/foundry/userdata/Data/modules/tabletop-rpg-music/
+       - shared_michaelghelfi:/home/foundry/userdata/Data/modules/michaelghelfi/
        - /home/ubuntu/sites/legendaryrealms.com.mx/backups/FoundryVTT:/home/foundry/vtt/resources/app/public/backups/
       networks:
        - internal_A
@@ -30,6 +34,14 @@ services:
 
 volumes:
     UserData:
+    shared_jb2a_patreon:
+        name: shared_jb2a_patreon
+    shared_ivan-duch-music-packs:
+        name: shared_ivan-duch-music-packs
+    shared_tabletop-rpg-music:
+        name: shared_tabletop-rpg-music
+    shared_michaelghelfi:
+        name: shared_michaelghelfi
 
 networks:
     internal_A:

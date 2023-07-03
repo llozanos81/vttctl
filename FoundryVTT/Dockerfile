@@ -13,12 +13,14 @@ WORKDIR /home/foundry/vtt
 COPY --from=build /home/foundry/vtt ./
 RUN set -xe \
     && export \
+    && apk add --no-cache --update shadow \
     && addgroup -g 3000 -S foundry \
     && adduser -g 3000 -S foundry -G foundry \
-    && apk add --no-cache --update nodejs icu-data-full \
-    && apk add --no-cache --update npm tzdata \
+    && usermod -u 3000 foundry \
+    && usermod -g 3000 foundry \
+    && apk add --no-cache --update nodejs icu-data-full npm tzdata \
     && npm install pm2 -g \
-    && apk del --no-cache npm \
+    && apk del --no-cache npm shadow \
     && chown foundry:foundry -R /home/foundry/vtt \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
     && mkdir -p /home/foundry/userdata \

@@ -10,3 +10,6 @@ DOMAIN=legendaryrealms.com.mx
 
 # Backups
 TAR_EXCLUSIONS="{'*.jpg','*.jpeg','*.png','*.PNG','*.webp','*.eot','*.woff*','*.gif','*.webm','*.ogg','*.mp3','*.mp4','*.mpg'}"
+
+# Default FoundryVTT version to execute using ./vttctl start
+DEFAULT_VER=

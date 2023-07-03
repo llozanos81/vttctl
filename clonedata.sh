@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-src="10.303"
-dst="11.304"
+ENV_FILE=.env
+if [ -f ${ENV_FILE} ]; then
+  export $(cat .env | xargs)
+fi
 
-CLONER_NAME=dataReplicator
-PROD_USERDATA="foundryvtt_prod_UserData$src"
-DEV_USERDATA="foundryvtt_dev_UserData$dst"
-docker run -v $PROD_USERDATA:/source -v $PROD_USERDATA:/destination -dit --name $CLONER_NAME alpine sh
-docker exec $CLONER_NAME \
-            rsync -avz --exclude '/source/Data/modules/jb2a_patreon' \
-             /source/ /destination/
-docker stop $CLONER_NAME
-docker rm $CLONER_NAME
+docker run \
+       --rm \
+       -v foundryvtt_prod_UserData:/source/ \
+       -v shared_michaelghelfi:/destination/ \
+       busybox \
+       ash -c "rm -rf /destination/*; \
+               cp -aur /source/Data/modules/michaelghelfi /destination/; \
+               mv /destination/michaelghelfi/* /destination/; \
+               rm -rf /destination/michaelghelfi/"
+
        
+       #ls -hal /source/Data/modules/jb2a_patreon/

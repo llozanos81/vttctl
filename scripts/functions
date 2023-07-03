@@ -30,21 +30,36 @@ function appReload() {
 }
 
 function prodBackup()  {
+    METADATA="backups/FoundryVTT/metadata.json"
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
     json=$(getVersion)
     if jq -e . >/dev/null 2>&1 <<<"$json"; then
         PROD_VER=$(echo $json | jq -r .version)
         if [ 1 -eq "$(echo "${PROD_VER} > 0" | bc)" ]; then
             DATESTAMP=$(date +"%Y%m%d")
+            BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
+
             docker run \
                 --rm \
-                --volumes-from $CONT_NAME \
+                -v foundryvtt_prod_UserData:/source/ \
                 -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
                 ash -c " \
-                tar -cvf /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar \
-                    -C / home/foundry/userdata \
-                ; chown $UID:$GID /backup/foundry_userdata_${PROD_VER}-${DATESTAMP}.tar"
+                tar -cvf /backup/$BACKUP_FILE \
+                    -C / /source \
+                ; chown $UID:$GID /backup/$BACKUP_FILE"
+            
+            DATE_FILE=$(stat --format="%y" "backups/FoundryVTT/$BACKUP_FILE" | awk {'print $1'})
+            new_object="{\"$DATE_FILE\": {\"Version\": ${PROD_VER}, \"File\": \"${BACKUP_FILE}\"}}"
+            python3 -c "import json; \
+                        obj = $new_object; \
+                        filename = '${METADATA}'; \
+                        data = json.load(open(filename)) \
+                        if filename else []; \
+                        data.append(obj) \
+                        if obj not in data else None; \
+                        json.dump(data, open(filename, 'w'), indent=2)"
+            
         fi
     fi
 }
@@ -52,14 +67,13 @@ function prodBackup()  {
 function prodLatestRestore() {
     REST_FILE=$(ls -t backups/*tar | head -1)
     FILE_NAME=$(basename ${REST_FILE})
-    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
     
     docker run \
                 --rm \
-                --volumes-from $CONT_NAME \
+                -v foundryvtt_prod_UserData:/source/ \
                 -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
-                tar -xvf /backup/${FILE_NAME} -C /
+                tar -xvf /backup/${FILE_NAME} -C /source/
 
 }
 
