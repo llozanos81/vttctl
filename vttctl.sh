@@ -35,7 +35,7 @@ fi
 case "$1" in
   validate)
       log_daemon_msg "Validating $DESC" "$NAME requirements"
-      if [ -d backups ]; then
+      if [ ! -d backups ]; then
        mkdir -p backups/FoundryVTT
        mkdir -p backups/volumes
       fi
