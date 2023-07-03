@@ -1,17 +1,18 @@
-bash
-cat
-xargs
-getent
-awk
-id
-sed
-grep
-docker
-docker-compose
-jq
-cp
-rm
-wc
-curl
-python3
-basename
+Requirements 
+- awk
+- basename
+- bash
+- cat
+- curl
+- cp
+- docker
+- docker-compose
+- getent
+- grep
+- id
+- jq
+- rm
+- sed
+- python3
+- wc
+- xargs

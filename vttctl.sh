@@ -33,6 +33,23 @@ if [[ "root" != ${USER} ]] && [[ $IN_DOCKER ]]; then
 fi 
 
 case "$1" in
+  validate)
+      log_daemon_msg "Validating $DESC" "$NAME requirements"
+      # File containing commands, one command per line
+      commands_file="scripts/binary_validation"
+
+      # Read commands from file into an array
+      mapfile -t commands < "$commands_file"
+
+      for cmd in "${commands[@]}"; do
+       if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Command not found: $cmd"
+        log_end_msg $?  
+        exit
+       fi
+      done
+      log_end_msg $?  
+        ;;
   start)
         log_daemon_msg "Starting $DESC" "$NAME"
         TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
