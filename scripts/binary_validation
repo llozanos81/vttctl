@@ -13,5 +13,7 @@ jq
 rm
 sed
 python3
+unzip
 wc
+wget
 xargs

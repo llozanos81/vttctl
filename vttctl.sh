@@ -256,19 +256,16 @@ case "$1" in
         ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
-            U_EXPIRES=$(echo $2 | awk -F= '{print $4}')
-            U_NOW=$(date '+%s')
-            if [[ U_NOW -gt U_EXPIRES ]]; then
-                echo "Foundry VTT Timed URL expired."
-                false
-                log_end_msg $? 
-            else
-                FILE=$(basename $(echo $2 | awk -F\? '{ print $1 }'))
-                echo $FILE
-                log_daemon_msg "Downloading Foundry VTT version v$VERSION"
-                true
-                log_end_msg $?      
-            fi
+            DEST="FoundryVTT"
+            VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
+            TARGET="${DEST}/${VERSION}"
+
+            FILE=$(basename "$2" | awk -F\? {'print $1'})
+            wget -O downloads/$FILE $2
+            echo "Extracting $FILE to ${TARGET}/ ..."
+            unzip -qq -o downloads/$FILE -d ${TARGET}/
+            VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
+            cp ${DEST}/docker-entrypoint.sh ${TARGET}
         else
             echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\""
         fi
