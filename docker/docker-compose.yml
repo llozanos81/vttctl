@@ -11,6 +11,7 @@ services:
       networks:
        - internal_A
     app:
+      user: 3000:3000
       restart: unless-stopped
       image: foundryvtt:${TAG:-latest}
       volumes:

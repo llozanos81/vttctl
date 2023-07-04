@@ -71,6 +71,7 @@ case "$1" in
             if [ "$DEV_ENABLED" == "true" ]; then
                   TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
             fi
+            fixOnwer
             log_end_msg $?
          else
              echo "Set default FoundryVTT version using \"$0 default\""
