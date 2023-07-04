@@ -4,8 +4,8 @@
 NGINX_PROD_PORT=8043
 NGINX_DEV_PORT=9043
 
-# Virtual Table Top name
-VTT_NAME=FoundryVTT
+# Virtual Table Top FQDN vtt.foobar.com
+HOSTNAME=vtt
 DOMAIN=foobar.com
 
 # Default FoundryVTT version to execute using ./vttctl start

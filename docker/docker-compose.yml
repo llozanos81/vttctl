@@ -12,7 +12,7 @@ services:
        - internal_A
     app:
       user: 3000:3000
-      restart: unless-stopped
+      restart: always
       image: foundryvtt:${TAG:-latest}
       volumes:
        - UserData:/home/foundry/userdata
@@ -25,7 +25,7 @@ services:
        - internal_A
     web:
       image: nginx:alpine
-      restart: unless-stopped
+      restart: always
       volumes:
         - ./nginx/foundry.conf:/etc/nginx/templates/default.conf.template:ro
       ports:
