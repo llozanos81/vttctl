@@ -7,7 +7,6 @@ fi
 if [ -f .unprepared ]; then
       rm .unprepared
       $0 validate
-      exit
 fi
 
 NAME=${VTT_NAME}
@@ -108,10 +107,11 @@ case "$1" in
                         done
                         read -p "Version to build?: " OPT
                   else 
-                        OPT=$VERSIONS
+                        OPT=1
+                        echo "Building FoundryVTT $VERSIONS ..."
                   fi
 
-            if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
+            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT=1 ]]; then
                   BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
                         matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
                         if [ -z "$matching_images" ]; then

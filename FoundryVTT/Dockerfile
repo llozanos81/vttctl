@@ -4,7 +4,7 @@ ARG BUILD_VER
 WORKDIR /home/foundry/vtt
 COPY ./$BUILD_VER/ .
 RUN set -xe \
-    && apk add --no-cache --update npm python3 make g++ \
+    && apk add --no-cache --update npm nodejs python3 make g++ \
     && cd resources/app/ \
     && npm install classic-level --build-from-source
 
@@ -17,9 +17,9 @@ RUN set -xe \
     && addgroup -g 3000 -S foundry \
     && adduser -g 3000 -S foundry -G foundry \
     && usermod -u 3000 foundry \
-    && usermod -g 3000 foundry \
     && apk add --no-cache --update nodejs icu-data-full npm tzdata \
     && npm install pm2 -g \
+    && npm install uuid@latest -g \
     && apk del --no-cache npm shadow \
     && chown foundry:foundry -R /home/foundry/vtt \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
