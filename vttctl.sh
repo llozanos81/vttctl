@@ -53,7 +53,10 @@ case "$1" in
         exit
        fi
       done
-      log_end_msg $?  
+      log_end_msg $?
+
+      sed '/^#/d; /^$/d' "dotenv.example" > ".env"
+
         ;;
   start)
         log_daemon_msg "Starting $DESC" "$NAME"
