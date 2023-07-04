@@ -38,6 +38,7 @@ case "$1" in
       if [ ! -d backups ]; then
        mkdir -p backups/FoundryVTT
        mkdir -p backups/volumes
+       mkdir -p downloads/
       fi
 
       # File containing commands, one command per line
