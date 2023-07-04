@@ -11,8 +11,9 @@ grep
 id
 jq
 rm
-sed
 python3
+sed
+timedatectl
 unzip
 wc
 wget

@@ -10,3 +10,6 @@ DOMAIN=foobar.com
 
 # Default FoundryVTT version to execute using ./vttctl start
 DEFAULT_VER=
+
+# Default Timezone
+TIMEZONE=UTC

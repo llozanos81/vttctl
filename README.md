@@ -12,7 +12,10 @@ Requirements
 - id
 - jq
 - rm
-- sed
+- timedatectl
 - python3
+- sed
+- unzip
 - wc
+- wget
 - xargs
