@@ -19,7 +19,6 @@ RUN set -xe \
     && adduser -g 3000 -S foundry -G foundry \
     && usermod -u 3000 foundry \
     && npm install uuid@latest pm2 -g \
-    && npm audit fix --force \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
     && chown foundry:foundry -R /home/foundry/ \

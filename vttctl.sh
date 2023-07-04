@@ -4,8 +4,8 @@ if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
 fi
 
-if [ -f .unprepared ]; then
-      rm .unprepared
+if [ -f .unprepared ] && [ $1 != "validate" ]; then
+      rm .unprepared >/dev/null 2>&1
       $0 validate
 fi
 
@@ -65,12 +65,16 @@ case "$1" in
 
         ;;
   start)
-        log_daemon_msg "Starting $DESC" "$NAME"
-        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
-        if [ "$DEV_ENABLED" == "true" ]; then
-            TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
-        fi
-        log_end_msg $?
+        if [ -n $DEFAULT_VER ]; then
+            log_daemon_msg "Starting $DESC" "$NAME"
+            TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
+            if [ "$DEV_ENABLED" == "true" ]; then
+                  TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+            fi
+            log_end_msg $?
+         else
+             echo "Set default FoundryVTT version using \"$0 default\""
+         fi
         ;;
   stop)
         log_daemon_msg "Stopping $DESC" "$NAME"
@@ -111,7 +115,7 @@ case "$1" in
                         echo "Building FoundryVTT $VERSIONS ..."
                   fi
 
-            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT=1 ]]; then
+            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT==1 ]]; then
                   BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
                         matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
                         if [ -z "$matching_images" ]; then
@@ -123,7 +127,7 @@ case "$1" in
                               if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
                                     $0 clean
                                     # Delete matching images
-                                    docker rmi $matching_images
+                                    docker rmi $matching_images >/dev/null 2>&1
                                     echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
                               else
                                     echo "Image building cancelled."
@@ -231,6 +235,13 @@ case "$1" in
         log_end_msg $?      
         ;;
   default)
+        if [ ! -n $DEFAULT_VER ]; then
+            VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+            word_count=$(echo "$VERSIONS" | wc -w)
+            if [ $word_count == 1 ]; then
+                  echo $VERSIONS
+            fi
+        fi
         log_daemon_msg "Setting default version of Foundry VTT. (Current $DEFAULT_VER)"
         VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
         OPT=""
@@ -250,10 +261,10 @@ case "$1" in
                   done
                   read -p "Version to set as default?: " OPT
               else 
-                  OPT=$VERSIONS
+                  OPT=1
               fi
 
-            if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
+            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT==1 ]]; then
                   NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
                   sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
                   echo "New default version is $NEW_DEFAULT_VER."
@@ -334,11 +345,11 @@ case "$1" in
             read -p "Are you sure you want to remove all v$DEL_VER related assets? (y/n): " confirmation
             if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
                   echo "Deleting zip file ..."
-                  rm -f downloads/*$DEL_VER*
+                  rm -f downloads/*$DEL_VER* >/dev/null 2>&1
                   echo "Deleting extracted folder ..."
-                  rm -rf FoundryVTT/$DEL_VER/
+                  rm -rf FoundryVTT/$DEL_VER/ >/dev/null 2>&1
                   echo "Deleting Docker image ..."
-                  docker image rm foundryvtt:$DEL_VER
+                  docker image rm foundryvtt:$DEL_VER >/dev/null 2>&1
                   echo "Cleaning completed."
             else
                   echo "Cleaning cancelled."
