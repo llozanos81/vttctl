@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Version: 0.01
+
 ENV_FILE=.env
 if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
