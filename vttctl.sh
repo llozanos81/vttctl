@@ -4,6 +4,12 @@ if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
 fi
 
+if [ -d .unprepared ]; then
+      rm .unprepared
+      $0 validate
+      exit
+fi
+
 NAME=${VTT_NAME}
 DESC=Environment
 PROD_PROJECT="${NAME}_PROD"
@@ -261,6 +267,7 @@ case "$1" in
             TARGET="${DEST}/${VERSION}"
 
             FILE=$(basename "$2" | awk -F\? {'print $1'})
+            rm -rf "${DEST}/${VERSION}" >/dev/null 2>&1;
             wget -O downloads/$FILE $2
             echo "Extracting $FILE to ${TARGET}/ ..."
             unzip -qq -o downloads/$FILE -d ${TARGET}/
