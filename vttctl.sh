@@ -4,7 +4,7 @@ if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
 fi
 
-if [ -d .unprepared ]; then
+if [ -f .unprepared ]; then
       rm .unprepared
       $0 validate
       exit
