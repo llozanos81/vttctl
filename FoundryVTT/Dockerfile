@@ -18,7 +18,8 @@ RUN set -xe \
     && addgroup -g 3000 -S foundry \
     && adduser -g 3000 -S foundry -G foundry \
     && usermod -u 3000 foundry \
-    && npm install uuid@latest pm2 -g \
+    && npm install uuid@latest -g \
+    && npm install pm2 -g \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
     && chown foundry:foundry -R /home/foundry/ \
