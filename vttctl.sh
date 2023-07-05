@@ -6,8 +6,7 @@ if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
 fi
 
-if [ -f .unprepared ] && [ $1 != "validate" ]; then
-      rm .unprepared >/dev/null 2>&1
+if [ ! -f .env ] && [ $1 != "validate" ]; then
       $0 validate
 fi
 

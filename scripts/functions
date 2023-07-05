@@ -47,8 +47,19 @@ function prodBackup()  {
                 ash -c " \
                 tar -cvf /backup/$BACKUP_FILE \
                     -C / /source \
-                ; chown $UID:$GID /backup/$BACKUP_FILE"
-            
+                ; chown $UID:$GID /backup/$BACKUP_FILE" >/dev/null 2>&1 &
+
+            BACKPID=$!
+
+            i=1
+            sp="/-\|"
+            echo -n ' '
+            while [ -d /proc/$BACKPID ]; do
+                printf "\r%c" "${sp:0:1}"
+                sp="${sp:1}${sp:0:1}"
+                sleep 0.05
+            done
+
             DATE_FILE=$(stat --format="%y" "backups/FoundryVTT/$BACKUP_FILE" | awk {'print $1'})
             new_object="{\"$DATE_FILE\": {\"Version\": ${PROD_VER}, \"File\": \"${BACKUP_FILE}\"}}"
             python3 -c "import json; \
@@ -59,7 +70,8 @@ function prodBackup()  {
                         data.append(obj) \
                         if obj not in data else None; \
                         json.dump(data, open(filename, 'w'), indent=2)"
-            
+            printf "\r   - %s created" "$BACKUP_FILE"
+            echo "   - Done!."
         fi
     fi
 }
