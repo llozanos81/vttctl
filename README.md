@@ -28,6 +28,8 @@
 ## Usage
 
 ```
+git clone https://github.com/llozanos81/vttctl
+cd vttctl
 ./vttctl.sh validate
 ```
 
