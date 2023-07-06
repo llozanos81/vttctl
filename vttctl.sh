@@ -10,6 +10,7 @@ if [ ! -f .env ] && [ $1 != "validate" ]; then
       $0 validate
 fi
 
+VTT_NAME=FoundryVTT
 NAME=${VTT_NAME}
 DESC=Environment
 PROD_PROJECT="${NAME}_PROD"
@@ -67,7 +68,7 @@ case "$1" in
         ;;
   start)
         if [ -n $DEFAULT_VER ]; then
-            log_daemon_msg "Starting $DESC" "$NAME"
+            log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
             TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
             if [ "$DEV_ENABLED" == "true" ]; then
                   TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
@@ -79,20 +80,20 @@ case "$1" in
          fi
         ;;
   stop)
-        log_daemon_msg "Stopping $DESC" "$NAME"
+        log_daemon_msg "Stopping $DESC" "$NAME $DEFAULT_VER" 
         stop
         log_end_msg $?
         ;;
   attach)
         APP_CONTAINER=$(docker container ls -a | grep vtt | grep app | awk '{print $1}')
-        docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT app container ...;ash"
+        docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT $DEFAULT_VER app container ...;ash"
         ;;
   logs)
         getLogs
         ;;
   clean)
         $0 stop
-        echo "Deleting FoundryVTT containers ..."
+        echo "Deleting FoundryVTT $DEFAULT_VER containers ..."
         TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
         TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
@@ -254,7 +255,7 @@ case "$1" in
                   count=1
 
                   for VER in $VERSIONS; do
-                        if [ $VER == $DEFAULT_VER ]; then
+                        if [ $VER = $DEFAULT_VER ]; then
                               echo -e "$count) \e[1;32m$VER\e[0m"
                         else
                               echo "$count) $VER"
@@ -266,20 +267,32 @@ case "$1" in
                   OPT=1
               fi
 
-            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT==1 ]]; then
-                  NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
-                  sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
-                  echo "New default version is $NEW_DEFAULT_VER."
-                  exit
-            elif [[ $OPT != "0" ]]; then
-                  echo "Invalid option."
-            fi
-        done       
+            case $OPT in
+                  [1-9])
+                        NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+                        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
+                        echo "New default version is $NEW_DEFAULT_VER."
+                        break
+                        ;;
+                  0)
+                        echo "Canceled."
+                        break
+                        ;;
+                  *)
+                        echo "Invalid option."
+                        ;;
+            esac
+        done
         exit      
         ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
             DEST="FoundryVTT"
+            count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
+            if [ $count -gt 9 ]; then
+                  echo "To many downloaded FoundryVTT binaries, please do $0 clean and remove at least 1 old version."
+                  ;;
+            fi
             VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
             TARGET="${DEST}/${VERSION}"
 
@@ -339,28 +352,32 @@ case "$1" in
                         ((count++))
                   fi
             done
-      read -p "Version to clean/delete?: " OPT
+            read -p "Version to clean/delete?: " OPT
 
-      if [[ $OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count ]]; then
-            ((OPT--))
-            DEL_VER=${list[$OPT]}
-            read -p "Are you sure you want to remove all v$DEL_VER related assets? (y/n): " confirmation
-            if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
-                  echo "Deleting zip file ..."
-                  rm -f downloads/*$DEL_VER* >/dev/null 2>&1
-                  echo "Deleting extracted folder ..."
-                  rm -rf FoundryVTT/$DEL_VER/ >/dev/null 2>&1
-                  echo "Deleting Docker image ..."
-                  docker image rm foundryvtt:$DEL_VER >/dev/null 2>&1
-                  echo "Cleaning completed."
-            else
-                  echo "Cleaning cancelled."
-                  exit
-            fi
-            break
-      elif [[ $OPT != "0" ]]; then
-            echo "Invalid option."
-      fi
+            case $OPT in
+                  [1-9])
+                        ((OPT--))
+                        DEL_VER=${list[$OPT]}
+                        read -p "Are you sure you want to remove all v$DEL_VER related assets? (y/n): " confirmation
+                        if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
+                              echo "Deleting zip file ..."
+                              rm -f downloads/*$DEL_VER* >/dev/null 2>&1
+                              echo "Deleting extracted folder ..."
+                              rm -rf FoundryVTT/$DEL_VER/ >/dev/null 2>&1
+                              echo "Deleting Docker image ..."
+                              docker image rm foundryvtt:$DEL_VER >/dev/null 2>&1
+                              echo "Cleaning completed."
+                        fi
+                        break
+                        ;;
+                  0)
+                        echo "Cleaning cancelled."
+                        break
+                        ;;
+                  *)
+                        echo "Invalid option."
+                        ;;
+            esac
       done
       ;;
   *)

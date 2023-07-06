@@ -70,7 +70,7 @@ function prodBackup()  {
                         data.append(obj) \
                         if obj not in data else None; \
                         json.dump(data, open(filename, 'w'), indent=2)"
-            printf "\r   - %s created" "$BACKUP_FILE"
+            printf "\r   - %s created" "$BACKUP_FILE\n"
             echo "   - Done!."
         fi
     fi
