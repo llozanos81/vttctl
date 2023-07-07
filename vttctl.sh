@@ -69,6 +69,7 @@ case "$1" in
   start)
         if [ -n $DEFAULT_VER ]; then
             log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
+            echo "Use port $NGINX_PROD_PORT/tcp."
             TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
             if [ "$DEV_ENABLED" == "true" ]; then
                   TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
@@ -180,7 +181,7 @@ case "$1" in
         appReload
         log_end_msg $?
         ;;
-  status)
+  info)
          json=$(getVersion)
          if [[ ! -z "$json" ]]; then
                 if jq -e . >/dev/null 2>&1 <<<"$json"; then
@@ -208,15 +209,21 @@ case "$1" in
                 log_daemon_msg "Foundry VTT is not running."
                 log_end_msg $?      
          fi
-         ;;
+      ;;
   restart)
         $0 stop
         sleep 1
         $0 start
         ;;
   backup)
-        log_daemon_msg "Backing up Foundry VTT."
-        prodBackup
+        log_daemon_msg "Backing up Foundry VTT $DEFAULT_VER."
+        IS_RUNNING=$($0 status --json=true | jq -r .running)
+        if [ $IS_RUNNING ]; then
+           prodBackup
+        else
+            echo " - Foundry VTT not running."
+        fi
+        
         log_end_msg $?      
         ;;
   restore)
@@ -291,7 +298,7 @@ case "$1" in
             count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
             if [ $count -gt 9 ]; then
                   echo "To many downloaded FoundryVTT binaries, please do $0 clean and remove at least 1 old version."
-                  ;;
+                  break
             fi
             VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
             TARGET="${DEST}/${VERSION}"
@@ -311,6 +318,22 @@ case "$1" in
             CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
             docker exec -it $CONT_NAME pm2 monit
         ;;
+  status)
+      json=$(getVersion)
+      if [[ -n $2 && $2 == "--json=true" ]]; then
+            if [[ ! -z "$json" ]]; then
+                  VERSION=$(jq -r .version >/dev/null 2>&1 <<< echo $json)
+                  if [[ ! -z "$VERSION" ]]; then
+                        echo "{ \"running\": true, \"version\": \"$VERSION\"}"
+                  else
+                        echo "{ \"running\": false }"
+                  fi
+            fi
+      else
+            echo "Foundry VTT version $DEFAULT_VER enabled"
+      fi
+      
+      ;;
   cleanup)
       DIR_VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
       IMG_VERSIONS=$(docker images -a | grep vtt | awk {'print $1":"$2'})
