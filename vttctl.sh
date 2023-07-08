@@ -313,10 +313,10 @@ case "$1" in
                   VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
                   cp ${DEST}/docker-entrypoint.sh ${TARGET}
             else
-                  echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\""
+                  echo "Version $MAJOR_VER not supported."
             fi
         else
-            echo "Version $MAJOR_VER not supported."
+            echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\""
         fi
         ;;
   monitor)
