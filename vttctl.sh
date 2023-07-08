@@ -150,16 +150,16 @@ case "$1" in
                   echo "${exclude[@]}" > FoundryVTT/.dockerignore
 
                   MAJOR_VER="${BUILD_VER%%.*}"
-                  foundry_version="^${MAJOR_VER}\..*"
-                  ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
+                  #foundry_version="^${MAJOR_VER}\..*"
+                  #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
 
                   TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
                   echo "Building version: $BUILD_VER"
+                  cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
                   cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
                   docker build \
                          --build-arg BUILD_VER=$BUILD_VER \
-                         --build-arg ALPINE_VER=$ALPINE_VER \
                          --build-arg TIMEZONE=$TIMEZONE \
                          -t foundryvtt:$BUILD_VER \
                          -f ./FoundryVTT/Dockerfile ./FoundryVTT

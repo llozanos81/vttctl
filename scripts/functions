@@ -107,3 +107,45 @@ function fixOnwer() {
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
     docker run --rm --volumes-from ${CONT_NAME} busybox chown 3000:3000 -R /home/foundry/userdata
 }
+
+function getReleases() {
+    url="https://foundryvtt.com/releases/"
+    html_content=$(curl -s "$url")
+
+    # Set custom record separator to </li>
+    # Extract <li> elements containing the stable release
+    stable_li_elements=$(awk -v RS='</li>' '/<span class="release-tag stable">Stable<\/span>/{print $0 "</li>"}' <<< "$html_content")
+
+    # Extract the release versions from stable <li> elements
+    release_versions=$(echo "$stable_li_elements" | grep -oP '(?<=<a href="/releases/)(9|[1-9][0-9]+)\.\d+')
+    
+    file_path="FoundryVTT/foundry_releases.json"
+    max_age_days=1
+    file_age=$(($(date +%s) - $(date -r "$file_path" +%s)))
+ 
+    versions=()
+    current_version=""
+
+    while IFS= read -r line; do
+    version=$(echo "$line" | awk -F '.' '{print $1}')
+    build=$(echo "$line" | awk -F '.' '{print $2}')
+
+    if [[ "$version" != "$current_version" ]]; then
+        versions+=("{\"version\":\"$version\",\"build\":[{\"number\":$build,\"latest\":false}]}")
+        current_version=$version
+    else
+        index=$((${#versions[@]} - 1))
+        versions[$index]=$(jq ".build += [{\"number\":$build,\"latest\":false}]" <<< "${versions[$index]}")
+        last_index=$(($index - 1))
+        versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
+    fi
+    done <<< "$output"
+
+    last_index=$((${#versions[@]} - 1))
+    versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
+
+    json=$(jq -n "{\"versions\":[$(IFS=,; echo "${versions[*]}")]}" 2>/dev/null)
+
+    echo "$json" > "$file_path"
+
+}
