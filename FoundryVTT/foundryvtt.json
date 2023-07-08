@@ -1,6 +1,11 @@
 {
     "foundryvtt": [
       {
+        "version": "9.xxx",
+        "nodejs": "16.5.x",
+        "alpine": "3.16"
+      },
+      {
         "version": "10.xxx",
         "nodejs": "16.13.x",
         "alpine": "3.16"
