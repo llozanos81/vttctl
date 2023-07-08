@@ -101,40 +101,41 @@ case "$1" in
         TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
   build)
-        log_daemon_msg "Building $DESC" "$NAME"
-        VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
-        if [[ -z $VERSIONS ]]; then
+      log_daemon_msg "Building $DESC" "$NAME"
+      VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
+      if [[ -z $VERSIONS ]]; then
             echo 'No FoundryVTT binares found, Use $0 download "TIMED_URL"'
             log_end_msg $?
             break
-        else
+      else
             echo $VERSIONS" version(s) available!"
-        fi
-            OPT=""
-            while [[ $OPT != "0" ]]; do
-                  word_count=$(echo "$VERSIONS" | wc -w)
+      fi
+      OPT=""
+      while [[ $OPT != "0" ]]; do
+            word_count=$(echo "$VERSIONS" | wc -w)
 
-                  if [[ $word_count -gt 1 ]]; then
-                        echo "Choose version to build ('0' to cancel):"
-                        count=1
+            if [[ $word_count -gt 1 ]]; then
+                  echo "Choose version to build ('0' to cancel):"
+                  count=1
 
-                        for VER in $VERSIONS; do
-                              echo "$count) $VER"
-                              ((count++))
-                        done
-                        read -p "Version to build?: " OPT
-                  else 
-                        OPT=1
-                        echo "Building FoundryVTT $VERSIONS ..."
-                  fi
+                  for VER in $VERSIONS; do
+                        echo "$count) $VER"
+                        ((count++))
+                  done
+                  read -p "Version to build?: " OPT
+            else 
+                  OPT=1
+                  echo "Building FoundryVTT $VERSIONS ..."
+            fi
 
-            if [[ ($OPT =~ ^[0-9]+$ && $OPT -ge 1 && $OPT -le $count) || $OPT==1 ]]; then
-                  BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+            case $OPT in
+                  [1-9])
+                        BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
                         matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
                         if [ -z "$matching_images" ]; then
                               echo "Image 'foundryvtt:$BUILD_VER' not found, building."
                         else
-                           read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
+                              read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
 
                               # Process user's confirmation
                               if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
@@ -149,37 +150,42 @@ case "$1" in
                         fi
 
 
-                  for EX in $VERSIONS; do
-                        if [[ "$EX" != "$BUILD_VER" ]]; then
-                              exclude+=($EX)
-                        fi
-                  done
+                        for EX in $VERSIONS; do
+                              if [[ "$EX" != "$BUILD_VER" ]]; then
+                                    exclude+=($EX)
+                              fi
+                        done
 
-                  rm FoundryVTT/.dockerignore >/dev/null 2>&1
-                  echo "${exclude[@]}" > FoundryVTT/.dockerignore
+                        rm FoundryVTT/.dockerignore >/dev/null 2>&1
+                        echo "${exclude[@]}" > FoundryVTT/.dockerignore
 
-                  MAJOR_VER="${BUILD_VER%%.*}"
-                  #foundry_version="^${MAJOR_VER}\..*"
-                  #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
+                        MAJOR_VER="${BUILD_VER%%.*}"
+                        #foundry_version="^${MAJOR_VER}\..*"
+                        #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
 
-                  TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
+                        TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
-                  echo "Building version: $BUILD_VER"
-                  cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
-                  cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
-                  export BUILDKIT_PROGRESS=plain docker build \
-                         --build-arg BUILD_VER=$BUILD_VER \
-                         --build-arg TIMEZONE=$TIMEZONE \
-                         -t foundryvtt:$BUILD_VER \
-                         -f ./FoundryVTT/Dockerfile ./FoundryVTT
-                  log_end_msg $?
-                  break
-            elif [[ $OPT != "0" ]]; then
-                  echo "Invalid option."
-            fi
-            done
-        log_end_msg $?
-        ;;
+                        echo "Building version: $BUILD_VER"
+                        cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
+                        cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
+                        export BUILDKIT_PROGRESS=plain docker build \
+                              --build-arg BUILD_VER=$BUILD_VER \
+                              --build-arg TIMEZONE=$TIMEZONE \
+                              -t foundryvtt:$BUILD_VER \
+                              -f ./FoundryVTT/Dockerfile ./FoundryVTT
+                        break
+                        ;;
+                  0)
+                        echo "Canceled."
+                        break
+                        ;;
+                  *)
+                        echo "Invalid option."
+                        ;;
+            esac
+      done
+      log_end_msg $?
+      ;;
   rebuild)
         $0 clean
         $0 build
