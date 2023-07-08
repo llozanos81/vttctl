@@ -106,84 +106,84 @@ case "$1" in
       if [[ -z $VERSIONS ]]; then
             echo "No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
             log_end_msg $?
-            ;;
       else
             echo $VERSIONS" version(s) available!"
-      fi
-      OPT=""
-      while [[ $OPT != "0" ]]; do
-            word_count=$(echo "$VERSIONS" | wc -w)
+            OPT=""
+            while [[ $OPT != "0" ]]; do
+                  word_count=$(echo "$VERSIONS" | wc -w)
 
-            if [[ $word_count -gt 1 ]]; then
-                  echo "Choose version to build ('0' to cancel):"
-                  count=1
+                  if [[ $word_count -gt 1 ]]; then
+                        echo "Choose version to build ('0' to cancel):"
+                        count=1
 
-                  for VER in $VERSIONS; do
-                        echo "$count) $VER"
-                        ((count++))
-                  done
-                  read -p "Version to build?: " OPT
-            else 
-                  OPT=1
-                  echo "Building FoundryVTT $VERSIONS ..."
-            fi
-
-            case $OPT in
-                  [1-9])
-                        BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
-                        matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
-                        if [ -z "$matching_images" ]; then
-                              echo "Image 'foundryvtt:$BUILD_VER' not found, building."
-                        else
-                              read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
-
-                              # Process user's confirmation
-                              if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
-                                    $0 clean
-                                    # Delete matching images
-                                    docker rmi $matching_images >/dev/null 2>&1
-                                    echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
-                              else
-                                    echo "Image building cancelled."
-                                    exit
-                              fi
-                        fi
-
-
-                        for EX in $VERSIONS; do
-                              if [[ "$EX" != "$BUILD_VER" ]]; then
-                                    exclude+=($EX)
-                              fi
+                        for VER in $VERSIONS; do
+                              echo "$count) $VER"
+                              ((count++))
                         done
+                        read -p "Version to build?: " OPT
+                  else 
+                        OPT=1
+                        echo "Building FoundryVTT $VERSIONS ..."
+                  fi
 
-                        rm FoundryVTT/.dockerignore >/dev/null 2>&1
-                        echo "${exclude[@]}" > FoundryVTT/.dockerignore
+                  case $OPT in
+                        [1-9])
+                              BUILD_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+                              matching_images=$(docker images | awk '{print $1":"$2}' | grep "$BUILD_VER")
+                              if [ -z "$matching_images" ]; then
+                                    echo "Image 'foundryvtt:$BUILD_VER' not found, building."
+                              else
+                                    read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
 
-                        MAJOR_VER="${BUILD_VER%%.*}"
-                        #foundry_version="^${MAJOR_VER}\..*"
-                        #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
+                                    # Process user's confirmation
+                                    if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
+                                          $0 clean
+                                          # Delete matching images
+                                          docker rmi $matching_images >/dev/null 2>&1
+                                          echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
+                                    else
+                                          echo "Image building cancelled."
+                                          exit
+                                    fi
+                              fi
 
-                        TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
-                        echo "Building version: $BUILD_VER"
-                        cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
-                        cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
-                        docker build --progress=plain \
-                              --build-arg BUILD_VER=$BUILD_VER \
-                              --build-arg TIMEZONE=$TIMEZONE \
-                              -t foundryvtt:$BUILD_VER \
-                              -f ./FoundryVTT/Dockerfile ./FoundryVTT
-                        break
-                        ;;
-                  0)
-                        echo "Canceled."
-                        break
-                        ;;
-                  *)
-                        echo "Invalid option."
-                        ;;
-            esac
-      done
+                              for EX in $VERSIONS; do
+                                    if [[ "$EX" != "$BUILD_VER" ]]; then
+                                          exclude+=($EX)
+                                    fi
+                              done
+
+                              rm FoundryVTT/.dockerignore >/dev/null 2>&1
+                              echo "${exclude[@]}" > FoundryVTT/.dockerignore
+
+                              MAJOR_VER="${BUILD_VER%%.*}"
+                              #foundry_version="^${MAJOR_VER}\..*"
+                              #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
+
+                              TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
+
+                              echo "Building version: $BUILD_VER"
+                              cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
+                              cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
+                              docker build --progress=plain \
+                                    --build-arg BUILD_VER=$BUILD_VER \
+                                    --build-arg TIMEZONE=$TIMEZONE \
+                                    -t foundryvtt:$BUILD_VER \
+                                    -f ./FoundryVTT/Dockerfile ./FoundryVTT
+                              break
+                              ;;
+                        0)
+                              echo "Canceled."
+                              break
+                              ;;
+                        *)
+                              echo "Invalid option."
+                              ;;
+                  esac
+            done
+      fi
+      
       log_end_msg $?
       ;;
   rebuild)
