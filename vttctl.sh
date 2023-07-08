@@ -104,9 +104,9 @@ case "$1" in
       log_daemon_msg "Building $DESC" "$NAME"
       VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
       if [[ -z $VERSIONS ]]; then
-            echo 'No FoundryVTT binares found, Use $0 download "TIMED_URL"'
+            echo "No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
             log_end_msg $?
-            break
+            ;;
       else
             echo $VERSIONS" version(s) available!"
       fi
@@ -168,7 +168,7 @@ case "$1" in
                         echo "Building version: $BUILD_VER"
                         cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
                         cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
-                        export BUILDKIT_PROGRESS=plain docker build \
+                        docker build --progress=plain \
                               --build-arg BUILD_VER=$BUILD_VER \
                               --build-arg TIMEZONE=$TIMEZONE \
                               -t foundryvtt:$BUILD_VER \
