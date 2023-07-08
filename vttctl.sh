@@ -341,9 +341,9 @@ case "$1" in
         ;;
   status)
       json=$(getVersion)
-      if [[ -n $2 && $2 == "--json=true" ]]; then
+      if [[ -n $2 && $2 == "--json=true" ]]; then      
             if [[ ! -z "$json" ]]; then
-                  VERSION=$(jq -r .version >/dev/null 2>&1 <<< echo $json)
+                  VERSION=$(echo $json | jq -r .version)
                   if [[ ! -z "$VERSION" ]]; then
                         echo "{ \"running\": true, \"version\": \"$VERSION\"}"
                   else
