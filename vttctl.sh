@@ -294,7 +294,8 @@ case "$1" in
         ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
-            MAJOR_VER="${BUILD_VER%%.*}"
+            VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
+            MAJOR_VER="${VERSION%%.*}"
             if [[ $MAJOR_VER -ge 9 ]]; then
                   DEST="FoundryVTT"
                   count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
@@ -302,7 +303,7 @@ case "$1" in
                         echo "To many downloaded FoundryVTT binaries, please do $0 clean and remove at least 1 old version."
                         break
                   fi
-                  VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
+                  
                   TARGET="${DEST}/${VERSION}"
 
                   FILE=$(basename "$2" | awk -F\? {'print $1'})
