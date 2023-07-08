@@ -163,12 +163,12 @@ case "$1" in
                          --build-arg TIMEZONE=$TIMEZONE \
                          -t foundryvtt:$BUILD_VER \
                          -f ./FoundryVTT/Dockerfile ./FoundryVTT
+                  log_end_msg $?
                   break
             elif [[ $OPT != "0" ]]; then
                   echo "Invalid option."
             fi
             done
-            exit
         log_end_msg $?
         ;;
   rebuild)
