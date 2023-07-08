@@ -148,7 +148,7 @@ case "$1" in
                         fi
                   done
 
-                  rm FoundryVTT/.dockerignore
+                  rm FoundryVTT/.dockerignore >/dev/null 2>&1
                   echo "${exclude[@]}" > FoundryVTT/.dockerignore
 
                   MAJOR_VER="${BUILD_VER%%.*}"
@@ -160,7 +160,7 @@ case "$1" in
                   echo "Building version: $BUILD_VER"
                   cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
                   cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
-                  docker build \
+                  export BUILDKIT_PROGRESS=plain docker build \
                          --build-arg BUILD_VER=$BUILD_VER \
                          --build-arg TIMEZONE=$TIMEZONE \
                          -t foundryvtt:$BUILD_VER \
