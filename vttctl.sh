@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Version: 0.01
 
+if [ ! -f .env ] && [ $1 != "validate" ]; then
+      $0 validate
+fi
+
 ENV_FILE=.env
 if [ -f ${ENV_FILE} ]; then
   export $(cat .env | xargs)
-fi
-
-if [ ! -f .env ] && [ $1 != "validate" ]; then
-      $0 validate
 fi
 
 VTT_NAME=FoundryVTT
@@ -104,7 +104,7 @@ case "$1" in
         log_daemon_msg "Building $DESC" "$NAME"
         VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
         if [[ -z $VERSIONS ]]; then
-            echo No FoundryVTT binares found, Use $0 download "TIMED_URL"'
+            echo 'No FoundryVTT binares found, Use $0 download "TIMED_URL"'
             log_end_msg $?
             break
         else
