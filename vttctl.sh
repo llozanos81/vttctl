@@ -67,7 +67,7 @@ case "$1" in
 
         ;;
   start)
-        if [ -n $DEFAULT_VER ]; then
+        if [[ -n $DEFAULT_VER ]]; then
             log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
             echo "Use port $NGINX_PROD_PORT/tcp."
             TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
@@ -77,7 +77,9 @@ case "$1" in
             fixOnwer
             log_end_msg $?
          else
-             echo "Set default FoundryVTT version using \"$0 default\""
+             echo "No default FoundryVTT version found."
+             $0 default
+             $0 start
          fi
         ;;
   stop)

@@ -24,7 +24,7 @@ RUN set -xe \
     && sed -i 's/Update Software/Update Disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"You may update your Foundry Virtual Tabletop software to a new version by checking for update on your preferred Software Update Channel."/"In app updates are Disabled, please use VTTctl for updates and upgrades."/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"Check For Update"/"In app updates are Disabled, please use VTTctl for updates and upgrades."/' /home/foundry/vtt/resources/app/public/lang/en.json \    
-    && sed -i 's/{{#unless updateButtonEnabled}}disabled{{/unless}}/disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \    
+    && sed -i 's/{{#unless updateButtonEnabled}}disabled{{\/unless}}/disabled/' /home/foundry/vtt/resources/app/templates/setup/setup-config.html \    
     && chown foundry:foundry -R /home/foundry/ \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh
 
