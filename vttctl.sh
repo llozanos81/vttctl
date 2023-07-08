@@ -294,7 +294,8 @@ case "$1" in
         ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
-            if [ MAJOR_VER -ge 9 ]; then
+            MAJOR_VER="${BUILD_VER%%.*}"
+            if [[ $MAJOR_VER -ge 9 ]]; then
                   DEST="FoundryVTT"
                   count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
                   if [ $count -gt 9 ]; then
