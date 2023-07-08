@@ -103,6 +103,13 @@ case "$1" in
   build)
         log_daemon_msg "Building $DESC" "$NAME"
         VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
+        if [[ -z $VERSIONS ]]; then
+            echo No FoundryVTT binares found, Use $0 download "TIMED_URL"'
+            log_end_msg $?
+            break
+        else
+            echo $VERSIONS" version(s) available!"
+        fi
             OPT=""
             while [[ $OPT != "0" ]]; do
                   word_count=$(echo "$VERSIONS" | wc -w)
