@@ -3,6 +3,8 @@
 # Public ports for Internet or Load balance proxy
 NGINX_PROD_PORT=8043
 NGINX_DEV_PORT=9043
+PUBLIC_PROD_PORT=80
+SSL_ENABLED=false
 
 # Virtual Table Top FQDN vtt.foobar.com
 HOSTNAME=vtt

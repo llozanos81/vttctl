@@ -21,8 +21,8 @@ RUN set -xe \
     && npm install pm2 -g \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
-    && sed -i 's/data-action="update"/data-action="none"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
-    && sed -i 's/data-tooltip="Update"/data-tooltip="Update disabled, Use VTTctl"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
+    && sed -i 's/data-action="update"/data-action="disabled"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
+    && sed -i 's/data-tooltip="Update"/data-tooltip="Update disabled, Use VTTctl instead."/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
     && chown foundry:foundry -R /home/foundry/ \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh
 

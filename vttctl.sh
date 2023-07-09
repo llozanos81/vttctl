@@ -1,13 +1,194 @@
 #!/usr/bin/env bash
 # Version: 0.01
 
-if [ ! -f .env ] && [ $1 != "validate" ]; then
-      $0 validate
-fi
+function stop() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml stop
+    docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml stop
+}
+
+function getLogs() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs
+}
+
+function liveLogs() {
+    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs -f
+}
+
+function getVersion() {
+    RESPONSE=/tmp/.response.txt
+    rm -rf $RESPONSE
+    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
+    if [ $status == 200 ]; then
+        cat $RESPONSE
+    else
+        echo "{ 'active': 'false' }"
+    fi
+}
+
+function appReload() {
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    docker exec -d $CONT_NAME pm2 restart foundry
+}
+
+function prodBackup()  {
+    METADATA="backups/FoundryVTT/metadata.json"
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    json=$(getVersion)
+    if jq -e . >/dev/null 2>&1 <<<"$json"; then
+        PROD_VER=$(echo $json | jq -r .version)
+        if [[ -n $PROD_VER ]]; then
+            DATESTAMP=$(date +"%Y%m%d")
+            BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
+
+            docker run \
+                --rm \
+                -v foundryvtt_prod_UserData:/source/ \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
+                busybox \
+                ash -c " \
+                tar -cvf /backup/$BACKUP_FILE \
+                    -C / /source \
+                ; chown $UID:$GID /backup/$BACKUP_FILE" >/dev/null 2>&1 &
+
+            BACKPID=$!
+
+            i=1
+            sp="/-\|"
+            echo -n ' '
+            while [ -d /proc/$BACKPID ]; do
+                printf "\r%c" "${sp:0:1}"
+                sp="${sp:1}${sp:0:1}"
+                sleep 0.05
+            done
+
+            DATE_FILE=$(stat --format="%y" "backups/FoundryVTT/$BACKUP_FILE" | awk {'print $1'})
+            new_object="{\"$DATE_FILE\": {\"Version\": \"${PROD_VER}\", \"File\": \"${BACKUP_FILE}\"}}"
+            python3 -c "import json; \
+                        obj = $new_object; \
+                        filename = '${METADATA}'; \
+                        data = json.load(open(filename)) \
+                        if filename else []; \
+                        data.append(obj) \
+                        if obj not in data else None; \
+                        json.dump(data, open(filename, 'w'), indent=2)"
+            printf "\r   - %s backup file created\n" "$BACKUP_FILE"
+            echo "   - Done!."
+        fi
+    fi
+}
+
+function prodLatestRestore() {
+    REST_FILE=$(ls -t backups/*tar | head -1)
+    FILE_NAME=$(basename ${REST_FILE})
+    
+    docker run \
+                --rm \
+                -v foundryvtt_prod_UserData:/source/ \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
+                busybox \
+                tar -xvf /backup/${FILE_NAME} -C /source/
+
+}
+
+function devLatestRestore() {
+    REST_FILE=$(ls -t backups/*tar | head -1)
+    FILE_NAME=$(basename ${REST_FILE})
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep dev | awk '{print $1}')
+    
+    docker run \
+                --rm \
+                --volumes-from $CONT_NAME \
+                -v $(pwd)/backups/FoundryVTT/:/backup \
+                busybox \
+                tar -xvf /backup/${FILE_NAME} -C /
+
+}
+
+function fixOnwer() {
+    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    docker run --rm --volumes-from ${CONT_NAME} busybox chown 3000:3000 -R /home/foundry/userdata
+}
+
+function fixConfig() {
+      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      docker run --rm --volumes-from ${CONT_NAME} busybox ash -c \
+            "sed -i 's/\"upnp\": true/\"upnp\": false/' /home/foundry/userdata/Config/options.json"
+}
+
+function getIPaddr() {
+    gateway_ip=$(ip route | awk '/default/ {print $3}' | sort -u)
+    interface=$(ip route get $gateway_ip | awk '/dev/ {print $3}')
+    ip_address=$(ip -o -4 addr show dev $interface | awk '{print $4}' | awk -F '/' '{print $1}')
+    echo $ip_address
+}
+
+function getReleases() {
+    url="https://foundryvtt.com/releases/"
+    html_content=$(curl -s "$url")
+
+    # Set custom record separator to </li>
+    # Extract <li> elements containing the stable release
+    stable_li_elements=$(awk -v RS='</li>' '/<span class="release-tag stable">Stable<\/span>/{print $0 "</li>"}' <<< "$html_content")
+
+    # Extract the release versions from stable <li> elements
+    release_versions=$(echo "$stable_li_elements" | grep -oP '(?<=<a href="/releases/)(9|[1-9][0-9]+)\.\d+')
+    
+    file_path="FoundryVTT/foundry_releases.json"
+    max_age_days=1
+    file_age=$(($(date +%s) - $(date -r "$file_path" +%s)))
+ 
+    versions=()
+    current_version=""
+
+    while IFS= read -r line; do
+    version=$(echo "$line" | awk -F '.' '{print $1}')
+    build=$(echo "$line" | awk -F '.' '{print $2}')
+
+    if [[ "$version" != "$current_version" ]]; then
+        versions+=("{\"version\":\"$version\",\"build\":[{\"number\":$build,\"latest\":false}]}")
+        current_version=$version
+    else
+        index=$((${#versions[@]} - 1))
+        versions[$index]=$(jq ".build += [{\"number\":$build,\"latest\":false}]" <<< "${versions[$index]}")
+        last_index=$(($index - 1))
+        versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
+    fi
+    done <<< "$output"
+
+    last_index=$((${#versions[@]} - 1))
+    versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
+
+    json=$(jq -n "{\"versions\":[$(IFS=,; echo "${versions[*]}")]}" 2>/dev/null)
+
+    echo "$json" > "$file_path"
+
+}
+
+function isPlatformSupported() {
+      platform="$1 $2 $3"
+      supported=(
+            "Ubuntu 22.04 aarch64"
+            "Ubuntu 22.04 x86_64"
+      )
+
+      for p in "${supported[@]}"; do
+            if [[ "$p" == "$platform" ]]; then
+                  matchFound=true
+                  echo -e "\e[92msupported\e[39m"
+                  break
+            fi
+      done
+
+      if [ ! $matchFound ]; then
+            echo "\e[93mnot validated\e[39m"
+      fi
+}
 
 ENV_FILE=.env
-if [ -f ${ENV_FILE} ]; then
-  export $(cat .env | xargs)
+if [ ! -f .env ] && [ $1 != "validate" ]; then
+      $0 validate
+elif [ -f ${ENV_FILE} ]; then
+      export $(cat .env | xargs)
 fi
 
 VTT_NAME=FoundryVTT
@@ -18,6 +199,21 @@ DEV_PROJECT="${NAME}_DEV"
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
 GID=$(getent passwd $USER | awk -F: '{print $4}')
+CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
+TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
+
+if ! command -v "lsb_release" >/dev/null 2>&1; then
+      LINUX_DISTRO="N/A lsb_release missing"
+else
+      LINUX_DISTRO=$(lsb_release -sir | head -1)
+      DISTRO_VERSION=$(lsb_release -sir | tail -1)
+fi
+
+if ! command -v "uname" >/dev/null 2>&1; then
+      CPU_ARCH="N/A uname missing."
+else
+      CPU_ARCH=$(uname -m)
+fi
 
 
 # Source function library.
@@ -28,9 +224,6 @@ else
         exit 1
 fi
 
-if [ -f scripts/functions ]; then
-        . ./scripts/functions
-fi
 
 IN_DOCKER=$(id -nG "$USER" | grep -qw "docker")
 
@@ -40,72 +233,9 @@ if [[ "root" != ${USER} ]] && [[ $IN_DOCKER ]]; then
 fi 
 
 case "$1" in
-  validate)
-      log_daemon_msg "Validating requirements ..."
-      if [ ! -d backups ]; then
-       mkdir -p backups/FoundryVTT
-       mkdir -p backups/volumes
-       mkdir -p downloads/
-       echo "[]" > backups/FoundryVTT/metadata.json
-      fi
-
-      # File containing commands, one command per line
-      commands_file="scripts/binary_validation"
-
-      # Read commands from file into an array
-      mapfile -t commands < "$commands_file"
-
-      for cmd in "${commands[@]}"; do
-       if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "Command not found: $cmd"
-        log_end_msg $?  
-        exit
-       fi
-      done
-      log_end_msg $?
-
-      sed '/^#/d; /^$/d' "dotenv.example" > ".env"
-
-        ;;
-  start)
-        if [[ -n $DEFAULT_VER ]]; then
-            log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
-            TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
-            if [ "$DEV_ENABLED" == "true" ]; then
-                  TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
-            fi
-            fixOnwer
-            $0 info
-            log_end_msg $?
-         else
-             echo "No default FoundryVTT version found."
-             $0 default
-             $0 start
-         fi
-        ;;
-  stop)
-        IS_RUNNING=$($0 status --json=true | jq -r .running)
-        if [ $IS_RUNNING ]; then
-            RUNNING_VERSION=$($0 status --json=true | jq -r .version)
-            log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
-            stop
-        else
-            echo " - Foundry VTT not running."
-        fi  
-        log_end_msg $?
-        ;;
   attach)
         APP_CONTAINER=$(docker container ls -a | grep vtt | grep app | awk '{print $1}')
         docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT $DEFAULT_VER app container ...;ash"
-        ;;
-  logs)
-        getLogs
-        ;;
-  clean)
-        $0 stop
-        echo "Deleting FoundryVTT $DEFAULT_VER containers ..."
-        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
-        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
   build)
       log_daemon_msg "Building $DESC" "$NAME"
@@ -165,9 +295,6 @@ case "$1" in
                               echo "${exclude[@]}" > FoundryVTT/.dockerignore
 
                               MAJOR_VER="${BUILD_VER%%.*}"
-                              #foundry_version="^${MAJOR_VER}\..*"
-                              #ALPINE_VER=$(jq -r --arg version "$foundry_version" '.foundryvtt[] | select(.version | test($version)) | .alpine' FoundryVTT/foundryvtt.json)
-
                               TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
                               echo "Building version: $BUILD_VER"
@@ -193,6 +320,149 @@ case "$1" in
       
       log_end_msg $?
       ;;
+  clean)  
+        $0 stop
+        echo "Deleting FoundryVTT $DEFAULT_VER containers ..."
+        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
+        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
+        ;;
+  default)
+        if [ ! -n $DEFAULT_VER ]; then
+            VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+            word_count=$(echo "$VERSIONS" | wc -w)
+            if [ $word_count == 1 ]; then
+                  echo $VERSIONS
+            fi
+        fi
+        log_daemon_msg "Setting default version of Foundry VTT. (Current $DEFAULT_VER)"
+        VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+        OPT=""
+        while [[ $OPT != "0" ]]; do
+              word_count=$(echo "$VERSIONS" | wc -w)
+              if [[ $word_count -gt 1 ]]; then
+                  echo "Choose version to build ('0' to cancel):"
+                  count=1
+
+                  for VER in $VERSIONS; do
+                        if [ $VER = $DEFAULT_VER ]; then
+                              echo -e "$count) \e[1;32m$VER\e[0m"
+                        else
+                              echo "$count) $VER"
+                        fi
+                        ((count++))
+                  done
+                  read -p "Version to set as default?: " OPT
+              else 
+                  OPT=1
+              fi
+
+            case $OPT in
+                  [1-9])
+                        NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
+                        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
+                        echo "New default version is $NEW_DEFAULT_VER."
+                        break
+                        ;;
+                  0)
+                        echo "Canceled."
+                        false
+                        log_end_msg $?
+                        break
+                        ;;
+                  *)
+                        echo "Invalid option."
+                        ;;
+            esac
+        done
+        exit      
+        ;; 
+  validate)
+      log_daemon_msg "Validating requirements ..."
+      if [ ! -d backups ]; then
+       mkdir -p backups/FoundryVTT
+       mkdir -p backups/volumes
+       mkdir -p downloads/
+       echo "[]" > backups/FoundryVTT/metadata.json
+      fi
+
+      commands=(basename
+                cat
+                curl
+                cp
+                docker
+                docker-compose
+                free
+                getent
+                grep
+                id
+                ip
+                jq
+                rm
+                python3
+                sed
+                sort
+                timedatectl
+                unzip
+                wc
+                wget
+                xargs)
+
+      for cmd in "${commands[@]}"; do
+       if ! command -v "$cmd" >/dev/null 2>&1; then
+        log_daemon_msg " - Command not found: $cmd"
+        false
+        log_end_msg $?  
+        exit
+       fi
+      done
+      
+
+
+      if [ ! -f .env ]; then
+            log_daemon_msg " - File .env does not exist, Generating ..."
+            sed '/^#/d; /^$/d' "dotenv.example" > ".env"
+      else
+            log_daemon_msg " - File .env exists."
+      fi
+      log_end_msg $?
+      
+        ;;
+  start)
+        if [[ -n $DEFAULT_VER ]]; then
+            log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
+            TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
+            if [ "$DEV_ENABLED" == "true" ]; then
+                  TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+            fi
+            fixOnwer
+            $0 info
+            log_end_msg $?
+         else
+             echo "No default FoundryVTT version found."
+             $0 default
+             $0 start
+         fi
+        ;;
+  stop)
+        IS_RUNNING=$($0 status --json=true | jq -r .running)
+        if [ $IS_RUNNING ]; then
+            RUNNING_VERSION=$($0 status --json=true | jq -r .version)
+            log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
+            stop
+        else
+            echo " - Foundry VTT not running."
+        fi  
+        log_end_msg $?
+        ;;
+
+  logs)
+        if [[ -n $2 && $2 == "--live" ]]; then
+            liveLogs
+        else
+            getLogs
+        fi
+        ;;
+
   rebuild)
         $0 clean
         $0 build
@@ -209,7 +479,9 @@ case "$1" in
                 if jq -e . >/dev/null 2>&1 <<<"$json"; then
                         IS_ACTIVE=$(echo $json | jq .active)
                         VERSION=$(echo $json | jq -r .version)
+                        SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
                         LOCAL_IP=$(getIPaddr)
+                        ETHERNET=$(ip add | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
                         PUBLIC_IP=$(curl -s ifconfig.co)
                         if [ $IS_ACTIVE = "true" ]; then
                                 WORLD=$(echo $json | jq -r .world)
@@ -217,19 +489,19 @@ case "$1" in
                                 log_daemon_msg "Foundry VTT v$VERSION is running."
                                 log_daemon_msg " System: ${SYSTEM}"
                                 log_daemon_msg " World: ${WORLD//-/ }"
-                                log_daemon_msg " Public IP: ${PUBLIC_IP}"
-                                log_daemon_msg " Internal IP: ${LOCAL_IP}"
-                                log_daemon_msg " Nginx Port: ${NGINX_PROD_PORT}"
-                                true
-                                log_end_msg $?
+
                         else
                                 log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
-                                log_daemon_msg " Public IP: ${PUBLIC_IP}"
-                                log_daemon_msg " Internal IP: ${LOCAL_IP}"
-                                log_daemon_msg " Nginx Port: ${NGINX_PROD_PORT}"
-                                true
-                                log_end_msg $?   
                         fi
+                        log_daemon_msg " --------------- System Info ---------------"
+                        log_daemon_msg " Platform: ${LINUX_DISTRO} ${DISTRO_VERSION} ${CPU_ARCH} ${SUPPORT}."
+                        log_daemon_msg " Network $ETHERNET config:"
+                        log_daemon_msg "  Public IP: ${PUBLIC_IP}"
+                        log_daemon_msg "  Internal IP: ${LOCAL_IP}"
+                        log_daemon_msg "  FoundryVTT port: TCP/${NGINX_PROD_PORT}"
+
+                        true
+                        log_end_msg $?
                 else
                         false
                         log_daemon_msg "Foundry VTT is not running."
@@ -272,57 +544,11 @@ case "$1" in
   fix)
         log_daemon_msg "Fixing permissions for Foundry VTT."
         fixOnwer
+        fixConfig
         $0 reload
         log_end_msg $?      
         ;;
-  default)
-        if [ ! -n $DEFAULT_VER ]; then
-            VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
-            word_count=$(echo "$VERSIONS" | wc -w)
-            if [ $word_count == 1 ]; then
-                  echo $VERSIONS
-            fi
-        fi
-        log_daemon_msg "Setting default version of Foundry VTT. (Current $DEFAULT_VER)"
-        VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
-        OPT=""
-        while [[ $OPT != "0" ]]; do
-              word_count=$(echo "$VERSIONS" | wc -w)
-              if [[ $word_count -gt 1 ]]; then
-                  echo "Choose version to build ('0' to cancel):"
-                  count=1
 
-                  for VER in $VERSIONS; do
-                        if [ $VER = $DEFAULT_VER ]; then
-                              echo -e "$count) \e[1;32m$VER\e[0m"
-                        else
-                              echo "$count) $VER"
-                        fi
-                        ((count++))
-                  done
-                  read -p "Version to set as default?: " OPT
-              else 
-                  OPT=1
-              fi
-
-            case $OPT in
-                  [1-9])
-                        NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
-                        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
-                        echo "New default version is $NEW_DEFAULT_VER."
-                        break
-                        ;;
-                  0)
-                        echo "Canceled."
-                        break
-                        ;;
-                  *)
-                        echo "Invalid option."
-                        ;;
-            esac
-        done
-        exit      
-        ;; 
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
             VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")

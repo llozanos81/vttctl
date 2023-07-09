@@ -10,6 +10,7 @@
 - cp
 - docker
 - docker-compose
+- free
 - getent
 - grep
 - id
