@@ -225,19 +225,19 @@ elif ! [ -x "/etc/init.d/functions" ]; then
         . /etc/init.d/functions
 
       function log_failure_msg() {
-            echo $1 $2 $3           
+            echo " * "$1 $2 $3           
       }
 
       function log_daemon_msg() {
-            echo $1 $2 $3      
+            echo " * "$1 $2 $3      
       }
 
       function log_end_msg() {
-            echo $1 $2 $3
+            echo " * "$1 $2 $3
       }
 
 else
-        echo "E: /lib/lsb/init-functions not found, lsb-base (>= 3.0-6) needed"
+        echo "E: /lib/lsb/init-functions not found, lsb-base needed"
         exit 1
 fi
 
@@ -402,12 +402,12 @@ case "$1" in
        echo "[]" > backups/FoundryVTT/metadata.json
       fi
 
+#                 docker-compose
       commands=(basename
                 cat
                 curl
                 cp
                 docker
-                docker-compose
                 free
                 getent
                 grep
