@@ -195,6 +195,7 @@ VTT_NAME=FoundryVTT
 NAME=${VTT_NAME}
 DESC=Environment
 PROD_PROJECT="${NAME}_PROD"
+PROD_PROJECT=${PROD_PROJECT,,}
 DEV_PROJECT="${NAME}_DEV"
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
@@ -402,7 +403,6 @@ case "$1" in
        echo "[]" > backups/FoundryVTT/metadata.json
       fi
 
-#                 docker-compose
       commands=(basename
                 cat
                 curl
