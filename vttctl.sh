@@ -219,6 +219,8 @@ fi
 # Source function library.
 if ! [ -x "/lib/lsb/init-functions" ]; then
         . /lib/lsb/init-functions
+elif ! [ -x "/etc/init.d/functions" ]; then
+        . /etc/init.d/functions
 else
         echo "E: /lib/lsb/init-functions not found, lsb-base (>= 3.0-6) needed"
         exit 1
