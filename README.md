@@ -13,11 +13,13 @@
 - getent
 - grep
 - id
+- iproute2
 - jq
 - rm
 - timedatectl
 - python3
 - sed
+- sort
 - unzip
 - wc
 - wget

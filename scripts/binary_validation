@@ -9,10 +9,12 @@ docker-compose
 getent
 grep
 id
+ip
 jq
 rm
 python3
 sed
+sort
 timedatectl
 unzip
 wc

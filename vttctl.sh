@@ -46,6 +46,7 @@ case "$1" in
        mkdir -p backups/FoundryVTT
        mkdir -p backups/volumes
        mkdir -p downloads/
+       echo "[]" > backups/FoundryVTT/metadata.json
       fi
 
       # File containing commands, one command per line
@@ -69,12 +70,12 @@ case "$1" in
   start)
         if [[ -n $DEFAULT_VER ]]; then
             log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
-            echo "Use port $NGINX_PROD_PORT/tcp."
             TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
             if [ "$DEV_ENABLED" == "true" ]; then
                   TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
             fi
             fixOnwer
+            $0 info
             log_end_msg $?
          else
              echo "No default FoundryVTT version found."
@@ -83,8 +84,14 @@ case "$1" in
          fi
         ;;
   stop)
-        log_daemon_msg "Stopping $DESC" "$NAME $DEFAULT_VER" 
-        stop
+        IS_RUNNING=$($0 status --json=true | jq -r .running)
+        if [ $IS_RUNNING ]; then
+            RUNNING_VERSION=$($0 status --json=true | jq -r .version)
+            log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
+            stop
+        else
+            echo " - Foundry VTT not running."
+        fi  
         log_end_msg $?
         ;;
   attach)
@@ -104,23 +111,23 @@ case "$1" in
       log_daemon_msg "Building $DESC" "$NAME"
       VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
       if [[ -z $VERSIONS ]]; then
-            echo "No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
+            log_daemon_msg " No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
             log_end_msg $?
       else
-            echo $VERSIONS" version(s) available!"
+            log_daemon_msg " "$VERSIONS" version(s) available!"
             OPT=""
             while [[ $OPT != "0" ]]; do
                   word_count=$(echo "$VERSIONS" | wc -w)
 
                   if [[ $word_count -gt 1 ]]; then
-                        echo "Choose version to build ('0' to cancel):"
+                        echo " Choose version to build ('0' to cancel):"
                         count=1
 
                         for VER in $VERSIONS; do
-                              echo "$count) $VER"
+                              echo " $count) $VER"
                               ((count++))
                         done
-                        read -p "Version to build?: " OPT
+                        read -p " Version to build?: " OPT
                   else 
                         OPT=1
                         echo "Building FoundryVTT $VERSIONS ..."
@@ -202,16 +209,24 @@ case "$1" in
                 if jq -e . >/dev/null 2>&1 <<<"$json"; then
                         IS_ACTIVE=$(echo $json | jq .active)
                         VERSION=$(echo $json | jq -r .version)
+                        LOCAL_IP=$(getIPaddr)
+                        PUBLIC_IP=$(curl -s ifconfig.co)
                         if [ $IS_ACTIVE = "true" ]; then
                                 WORLD=$(echo $json | jq -r .world)
                                 SYSTEM=$(echo $json | jq -r .system)
                                 log_daemon_msg "Foundry VTT v$VERSION is running."
                                 log_daemon_msg " System: ${SYSTEM}"
                                 log_daemon_msg " World: ${WORLD//-/ }"
+                                log_daemon_msg " Public IP: ${PUBLIC_IP}"
+                                log_daemon_msg " Internal IP: ${LOCAL_IP}"
+                                log_daemon_msg " Nginx Port: ${NGINX_PROD_PORT}"
                                 true
                                 log_end_msg $?
                         else
                                 log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
+                                log_daemon_msg " Public IP: ${PUBLIC_IP}"
+                                log_daemon_msg " Internal IP: ${LOCAL_IP}"
+                                log_daemon_msg " Nginx Port: ${NGINX_PROD_PORT}"
                                 true
                                 log_end_msg $?   
                         fi
@@ -231,9 +246,10 @@ case "$1" in
         $0 start
         ;;
   backup)
-        log_daemon_msg "Backing up Foundry VTT $DEFAULT_VER."
         IS_RUNNING=$($0 status --json=true | jq -r .running)
         if [ $IS_RUNNING ]; then
+            RUNNING_VERSION=$($0 status --json=true | jq -r .version)
+            log_daemon_msg "Backing up Foundry VTT $RUNNING_VERSION."   
            prodBackup
         else
             echo " - Foundry VTT not running."

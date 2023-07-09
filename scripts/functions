@@ -35,7 +35,7 @@ function prodBackup()  {
     json=$(getVersion)
     if jq -e . >/dev/null 2>&1 <<<"$json"; then
         PROD_VER=$(echo $json | jq -r .version)
-        if [ 1 -eq "$(echo "${PROD_VER} > 0" | bc)" ]; then
+        if [[ -n $PROD_VER ]]; then
             DATESTAMP=$(date +"%Y%m%d")
             BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
 
@@ -61,7 +61,7 @@ function prodBackup()  {
             done
 
             DATE_FILE=$(stat --format="%y" "backups/FoundryVTT/$BACKUP_FILE" | awk {'print $1'})
-            new_object="{\"$DATE_FILE\": {\"Version\": ${PROD_VER}, \"File\": \"${BACKUP_FILE}\"}}"
+            new_object="{\"$DATE_FILE\": {\"Version\": \"${PROD_VER}\", \"File\": \"${BACKUP_FILE}\"}}"
             python3 -c "import json; \
                         obj = $new_object; \
                         filename = '${METADATA}'; \
@@ -70,7 +70,7 @@ function prodBackup()  {
                         data.append(obj) \
                         if obj not in data else None; \
                         json.dump(data, open(filename, 'w'), indent=2)"
-            printf "\r   - %s created" "$BACKUP_FILE\n"
+            printf "\r   - %s backup file created\n" "$BACKUP_FILE"
             echo "   - Done!."
         fi
     fi
@@ -106,6 +106,13 @@ function devLatestRestore() {
 function fixOnwer() {
     CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
     docker run --rm --volumes-from ${CONT_NAME} busybox chown 3000:3000 -R /home/foundry/userdata
+}
+
+function getIPaddr() {
+    gateway_ip=$(ip route | awk '/default/ {print $3}' | sort -u)
+    interface=$(ip route get $gateway_ip | awk '/dev/ {print $3}')
+    ip_address=$(ip -o -4 addr show dev $interface | awk '{print $4}' | awk -F '/' '{print $1}')
+    echo $ip_address
 }
 
 function getReleases() {

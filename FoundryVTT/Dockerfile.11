@@ -7,7 +7,7 @@ RUN set -xe \
     && cd resources/app/ \
     && npm install classic-level --build-from-source
 
-FROM alpine:$3.18
+FROM alpine:3.18
 ARG TIMEZONE
 WORKDIR /home/foundry/vtt
 COPY --from=build /home/foundry/vtt ./
