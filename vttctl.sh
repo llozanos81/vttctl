@@ -78,7 +78,7 @@ function prodBackup()  {
 }
 
 function prodLatestRestore() {
-    REST_FILE=$(ls -t backups/*tar | head -1)
+    REST_FILE=$(ls -t backups/FoundryVTT/*tar | head -1)
     FILE_NAME=$(basename ${REST_FILE})
     
     docker run \
@@ -86,7 +86,7 @@ function prodLatestRestore() {
                 -v foundryvtt_prod_UserData:/source/ \
                 -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
-                tar -xvf /backup/${FILE_NAME} -C /source/
+                tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=1
 
 }
 
@@ -237,7 +237,7 @@ elif ! [ -x "/etc/init.d/functions" ]; then
       }
 
 else
-        echo "E: /lib/lsb/init-functions not found, lsb-base needed"
+        echo "E: /lib/lsb/init-functions or /etc/init.d/functions not found, lsb-base needed"
         exit 1
 fi
 
