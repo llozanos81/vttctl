@@ -194,9 +194,10 @@ fi
 VTT_NAME=FoundryVTT
 NAME=${VTT_NAME}
 DESC=Environment
-PROD_PROJECT="${NAME}_PROD"
+PROD_PROJECT="${NAME}_prod"
 PROD_PROJECT=${PROD_PROJECT,,}
-DEV_PROJECT="${NAME}_DEV"
+DEV_PROJECT="${NAME}_dev"
+DEV_PROJECT=${DEV_PROJECT,,}
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
 GID=$(getent passwd $USER | awk -F: '{print $4}')
