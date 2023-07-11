@@ -8,6 +8,7 @@
 - cat
 - curl
 - cp
+- date
 - docker
 - docker-compose
 - free

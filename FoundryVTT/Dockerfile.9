@@ -18,8 +18,9 @@ RUN set -xe \
     && adduser -g 3000 -S foundry -G foundry \
     && usermod -u 3000 foundry \
     && npm cache clean --force \
-    && npm install uuid@latest -g --force \
-    && npm install pm2 -g \
+    && npm install -g uuid@latest \
+    && npm install -g pm2 \
+    && npm install -g @foundryvtt/foundryvtt-cli \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
     && sed -i 's/Update Software/Update Disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \

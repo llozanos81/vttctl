@@ -408,7 +408,9 @@ case "$1" in
                 cat
                 curl
                 cp
+                date
                 docker
+                docker-compose
                 free
                 getent
                 grep

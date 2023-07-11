@@ -20,7 +20,7 @@ services:
        - shared_ivan-duch-music-packs:/home/foundry/userdata/Data/modules/ivan-duch-music-packs/
        - shared_tabletop-rpg-music:/home/foundry/userdata/Data/modules/tabletop-rpg-music/
        - shared_michaelghelfi:/home/foundry/userdata/Data/modules/michaelghelfi/
-       - ../backups/FoundryVTT:/home/foundry/vtt/resources/app/public/backups/
+       - ../backups/FoundryVTT:/home/foundry/vtt/resources/app/public/backups/:ro
       networks:
        - internal_A
     web:
@@ -28,6 +28,7 @@ services:
       restart: always
       volumes:
         - ./nginx/foundry.conf:/etc/nginx/templates/default.conf.template:ro
+        - ../backups/FoundryVTT:/var/www/backups/:ro
       ports:
         - "${NGINX_PROD_PORT}:80/tcp"
       networks:
