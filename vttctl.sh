@@ -295,7 +295,7 @@ case "$1" in
                                     if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
                                           $0 clean
                                           # Delete matching images
-                                          docker rmi $matching_images >/dev/null 2>&1
+                                          docker image rmi $matching_images >/dev/null 2>&1
                                           echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
                                     else
                                           echo "Image building cancelled."
