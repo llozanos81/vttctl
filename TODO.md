@@ -1,5 +1,6 @@
 Create Public URL for created backup using ./vttctl.sh backup
 Add flag for compression using gz for backup like ./vttctl.sh backup -z
+fix network interface detection ./vttctl.sh info
 Add HTTPS support. (Caddy?)
 Add support for Amazon Linux 2
 Add support for CentOS 7

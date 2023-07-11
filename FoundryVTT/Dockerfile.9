@@ -3,7 +3,7 @@ ARG BUILD_VER
 WORKDIR /home/foundry/vtt
 COPY ./${BUILD_VER}/ .
 RUN set -xe \
-    && apk add --no-cache --update npm nodejs python3 make g++ \
+    && apk add --no-cache --update npm nodejs python3 \
     && cd resources/app/ \
     && npm install classic-level --build-from-source
 
@@ -18,10 +18,11 @@ RUN set -xe \
     && adduser -g 3000 -S foundry -G foundry \
     && usermod -u 3000 foundry \
     && npm cache clean --force \
+    && npm install -g npm@latest \
     && npm install -g uuid@latest \
     && npm install -g pm2 \
-    && npm install -g @foundryvtt/foundryvtt-cli \
     && apk del --no-cache npm shadow \
+    && npm cache clean --force \
     && mkdir -p /home/foundry/userdata \
     && sed -i 's/Update Software/Update Disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"You may update your Foundry Virtual Tabletop software to a new version by checking for update on your preferred Software Update Channel."/"In app updates are Disabled, please use VTTctl for updates and upgrades instead."/' /home/foundry/vtt/resources/app/public/lang/en.json \

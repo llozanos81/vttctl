@@ -19,7 +19,6 @@ RUN set -xe \
     && usermod -u 3000 foundry \
     && npm install -g uuid@latest \
     && npm install -g pm2 \
-    && npm install -g @foundryvtt/foundryvtt-cli \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
     && sed -i 's/data-action="update"/data-action="disabled"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \

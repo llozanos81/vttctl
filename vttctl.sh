@@ -17,11 +17,11 @@ function liveLogs() {
 function getVersion() {
     RESPONSE=/tmp/.response.txt
     rm -rf $RESPONSE
-    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
+    status=$(curl -s -w %{http_code} http://127.0.0.1:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
     if [ $status == 200 ]; then
         cat $RESPONSE
     else
-        echo "{ 'active': 'false' }"
+        echo "{ \"running\": false }"
     fi
 }
 
@@ -116,7 +116,7 @@ function fixConfig() {
 }
 
 function getIPaddr() {
-    gateway_ip=$(ip route | awk '/default/ {print $3}' | sort -u)
+    gateway_ip=$(ip route | awk '/default/ {if ($3 ~ /\./) print $3}' | sort -u)
     interface=$(ip route get $gateway_ip | awk '/dev/ {print $3}')
     ip_address=$(ip -o -4 addr show dev $interface | awk '{print $4}' | awk -F '/' '{print $1}')
     echo $ip_address
@@ -203,6 +203,9 @@ TAG=${DEFAULT_VER}
 GID=$(getent passwd $USER | awk -F: '{print $4}')
 CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
 TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
+LOCAL_IP=$(getIPaddr)
+ETHERNET=$(ip add | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
+PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
 if ! command -v "lsb_release" >/dev/null 2>&1; then
       LINUX_DISTRO="N/A lsb_release missing"
@@ -244,7 +247,7 @@ else
 fi
 
 
-IN_DOCKER=$(id -nG "$USER" | grep -qw "docker")
+IN_DOCKER=$(id -nG "$USER" | grep -qw "docker" )
 
 if [[ "root" != ${USER} ]] && [[ $IN_DOCKER ]]; then
     log_failure_msg "Usage: sudo $0 \n - alternative: add $USER to docker group."
@@ -292,10 +295,10 @@ case "$1" in
                                     read -p "Are you sure you want to rebuild image 'foundryvtt:$BUILD_VER'? (y/n): " confirmation
 
                                     # Process user's confirmation
-                                    if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
-                                          $0 clean
+                                    if [[ "$confirmation" == "y" || "$confirmation" == "Y" ]]; then                              
+                                          $0 stop
                                           # Delete matching images
-                                          docker image rmi $matching_images >/dev/null 2>&1
+                                          docker image rm $matching_images >/dev/null 2>&1
                                           echo "Image(s) matching '$BUILD_VER' deleted. Re-building."
                                     else
                                           echo "Image building cancelled."
@@ -341,7 +344,7 @@ case "$1" in
       ;;
   clean)  
         $0 stop
-        echo "Deleting FoundryVTT $DEFAULT_VER containers ..."
+        echo "Deleting FoundryVTT containers ..."
         TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
         TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
@@ -464,8 +467,8 @@ case "$1" in
          fi
         ;;
   stop)
-        IS_RUNNING=$($0 status --json=true | jq -r .running)
-        if [ $IS_RUNNING ]; then
+        IS_RUNNING=$( $0 status --json=true | jq -r '.running')
+        if [ $IS_RUNNING == "" ]; then
             RUNNING_VERSION=$($0 status --json=true | jq -r .version)
             log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
             stop
@@ -483,11 +486,6 @@ case "$1" in
         fi
         ;;
 
-  rebuild)
-        $0 clean
-        $0 build
-        log_end_msg $?
-        ;;   
   reload|force-reload)
         log_daemon_msg "Reloading $DESC configuration files for" "$NAME"
         appReload
@@ -500,9 +498,6 @@ case "$1" in
                         IS_ACTIVE=$(echo $json | jq .active)
                         VERSION=$(echo $json | jq -r .version)
                         SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
-                        LOCAL_IP=$(getIPaddr)
-                        ETHERNET=$(ip add | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
-                        PUBLIC_IP=$(curl -s ifconfig.co)
                         if [ $IS_ACTIVE = "true" ]; then
                                 WORLD=$(echo $json | jq -r .world)
                                 SYSTEM=$(echo $json | jq -r .system)
@@ -603,10 +598,11 @@ case "$1" in
         ;;
   status)
       json=$(getVersion)
-      if [[ -n $2 && $2 == "--json=true" ]]; then      
+      if [[ -n $2 && $2 == "--json=true" ]]; then     
             if [[ ! -z "$json" ]]; then
-                  VERSION=$(echo $json | jq -r .version)
-                  if [[ ! -z "$VERSION" ]]; then
+                  IS_RUNNING=$(echo $json | jq -r .running)
+                  if [[ -n "$IS_RUNNING" && "$IS_RUNNING" == "true" ]]; then
+                        VERSION=$(echo $json | jq -r .version)
                         echo "{ \"running\": true, \"version\": \"$VERSION\"}"
                   else
                         echo "{ \"running\": false }"
@@ -687,7 +683,7 @@ case "$1" in
       done
       ;;
   *)
-        log_failure_msg "Usage: $N {start|stop|logs|clean|cleanup|build|rebuild|status|monitor|restart|reload|force-reload}"
+        log_failure_msg "Usage: $N {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
         exit 1
         ;;
 esac
