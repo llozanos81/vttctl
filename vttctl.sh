@@ -607,10 +607,11 @@ case "$1" in
         ;;
   info)
          IS_RUNNING=$($0 status --json=true | jq -r '.running')
-         if [[ $IS_RUNNING ]]; then
+         IS_INACTIVE=$($0 status --json=true | jq -r '.world')
+         if [[ $IS_RUNNING == "true" ]]; then
                   VERSION=$($0 status --json=true | jq -r '.version')
                   SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
-                  if [ $IS_RUNNING = "true" ]; then
+                  if [[ ! $IS_INACTIVE == "inactive" ]]; then
                         WORLD=$($0 status --json=true | jq -r .world)
                         SYSTEM=$($0 status --json=true | jq -r .system)
                         log_daemon_msg "Foundry VTT v$VERSION is running."
@@ -630,7 +631,7 @@ case "$1" in
 
             true
             log_end_msg $?
-         else
+         elif [[ $IS_RUNNING == "error" ]]; then
             false
             log_daemon_msg "Foundry VTT is not running."
             log_end_msg $?
@@ -706,11 +707,12 @@ case "$1" in
             docker exec -it $CONT_NAME pm2 monit
         ;;
   status)
-      if [[ -n $2 && $2 == "--json=true" ]]; then     
+      if [[ -n $2 && $2 == "--json=true" ]]; then
             json=$(getVersion)
             if [[ ! -z "$json" ]]; then
                   IS_RUNNING=$(echo $json | jq -r .running)
                   IS_ACTIVE=$(echo $json | jq -r .active)
+                  VERSION=$(echo "$json" | jq -r '.version')
 
                   if [[ $IS_RUNNING == "null" && $IS_ACTIVE == "true" ]]; then
                         RUNNING="true"
@@ -720,7 +722,7 @@ case "$1" in
                         SYSTEM_VERSION=$(echo "$json" | jq -r '.systemVersion')
                         CURRENT_STATUS="true"
                   elif [[ $IS_ACTIVE == "false" ]]; then
-                        CURRENT_STATUS="true"
+                        CURRENT_STATUS="inactive"
                   elif [[ ! $IS_RUNNING == "false" ]]; then
                         CURRENT_STATUS="error"
                   fi
@@ -729,24 +731,24 @@ case "$1" in
                         true)
                               echo "{ \"running\": ${RUNNING}, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
                               ;;
+                        inactive)
+                              echo "{ \"running\": true, \"world\": \"inactive\", \"version\": \"$VERSION\" }"
+                              ;;
                         false)
                               echo "{ \"running\": false }"
                               ;;
                         *)
-                              echo "{ \"running\": \"error\" }"
+                              http_code=$(echo "$json" | jq -r '.http')
+                              echo "{ \"running\": \"error\", \"http\": ${http_code} }"
                               ;;
                   esac
-            
-
-                  #if [[ -n "$IS_RUNNING" && "$IS_RUNNING" == "true" ]]; then
-                  #      VERSION=$(echo $json | jq -r .version)
-                  #      echo "{ \"running\": true, \"version\": \"$VERSION\"}"
-                  #else
-                  #      echo "{ \"running\": false }"
-                  #fi
+            else
+                  log_daemon_msg "Foundry VTT v$DEFAULT_VER enabled"
+                  $0 info
             fi
       else
-            echo "Foundry VTT version $DEFAULT_VER enabled"
+            log_daemon_msg "Foundry VTT v$DEFAULT_VER enabled"
+            $0 info
       fi
       
       ;;
