@@ -41,7 +41,6 @@ cd vttctl
  Copy TIMED URL from FoundryVTT.com, Choose Linux/NodeJS as Operative System and paste it with double quotes as second argument for vttctl.
 
 ```
-./vttctl.sh validate
 ./vttctl.sh download "TIMED_URL"
 ./vttctl.sh build
 ./vttctl.sh default

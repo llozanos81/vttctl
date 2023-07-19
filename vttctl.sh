@@ -249,16 +249,28 @@ function isPlatformSupported() {
             "Ubuntu 22.04 x86_64"
       )
 
+      notsupported=(
+            "CentOS 5 x86_64"
+      )
+
       for p in "${supported[@]}"; do
             if [[ "$p" == "$platform" ]]; then
-                  matchFound=true
+                  matchFoundSupported=true
                   echo -e "\e[92msupported\e[39m"
                   break
             fi
       done
 
-      if [ ! $matchFound ]; then
-            echo "\e[93mnot validated\e[39m"
+      for p in "${notsupported[@]}"; do
+            if [[ "$p" == "$platform" ]]; then
+                  matchFoundNotSupported=true
+                  echo -e "\e[31mnot supported\e[39m"
+                  break
+            fi
+      done
+
+      if [ ! $matchFoundSupported && ! $matchFoundNotSupported ]; then
+            echo "\e[93mnot tested\e[39m"
       fi
 }
 
@@ -550,7 +562,7 @@ case "$1" in
                   docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d -e VARS=$VARS -e TAG=$TAG
             fi
             fixOnwer
-            sleep 1
+            sleep 2
             $0 info
             log_end_msg $?
          else
@@ -695,20 +707,20 @@ case "$1" in
                   IS_ACTIVE=$(echo $json | jq -r .active)
 
                   if [[ $IS_RUNNING == "null" && $IS_ACTIVE == "true" ]]; then
-
                         VERSION=$(echo "$json" | jq -r '.version')
                         VTTWORLD=$(echo "$json" | jq -r '.world')
                         VTTSYSTEM=$(echo "$json" | jq -r '.system')
                         SYSTEM_VERSION=$(echo "$json" | jq -r '.systemVersion')
                         CURRENT_STATUS="true"
-
+                  elif [[ $IS_ACTIVE == "false" ]]; then
+                        CURRENT_STATUS="true"
                   elif [[ ! $IS_RUNNING == "false" ]]; then
                         CURRENT_STATUS="error"
                   fi
 
                   case $CURRENT_STATUS in
                         true)
-                              echo "{ \"running\": true, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
+                              echo "{ \"running\": ${IS_RUNNING}, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
                               ;;
                         false)
                               echo "{ \"running\": false }"

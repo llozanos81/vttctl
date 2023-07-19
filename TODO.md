@@ -1,6 +1,7 @@
 # TODO
 - Validate download URL is the correct for Linux deployment
 - fix network interface detection ./vttctl.sh info
+- Redo help section
 - Add HTTPS support. (Caddy?)
 - Add support for Amazon Linux 2
 - Add support for CentOS 7
