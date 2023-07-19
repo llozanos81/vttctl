@@ -279,7 +279,7 @@ DEV_PROJECT=${DEV_PROJECT,,}
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
 FQDN=${HOSTNAME}.${DOMAIN}
-if [ $SSL_ENABLED == "true" ]; then
+if [[ $SSL_ENABLED == "true" ]]; then
       WEB_PROTO="https"
 else
       WEB_PROTO="http"
