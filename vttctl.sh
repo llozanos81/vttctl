@@ -23,7 +23,7 @@ function getVersion() {
     if [ $status == 200 ]; then
         cat $RESPONSE
     else
-        echo "{ \"running\": \"Error\" }"
+        echo "{ \"running\": \"error\" }"
     fi
 }
 
@@ -561,12 +561,15 @@ case "$1" in
         ;;
   stop)
         IS_RUNNING=$($0 status --json=true | jq -r '.running')
-        if [[ "$IS_RUNNING" == "null" ]]; then
+        if [[ "$IS_RUNNING" == "true" ]]; then
             RUNNING_VERSION=$($0 status --json=true | jq -r .version)
             log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
             stop
+        elif [[ "$IS_RUNNING" == "false" ]]; then
+            log_daemon_msg "Stopping $DESC" "$NAME $DEFAULT_VERSION."
+            stop
         else
-            echo " - Foundry VTT not running."
+            log_daemon_msg " Foundry VTT not running."
         fi  
         log_end_msg $?
         ;;
@@ -585,40 +588,34 @@ case "$1" in
         log_end_msg $?
         ;;
   info)
-         json=$(getVersion)
-         if [[ ! -z "$json" ]]; then
-                if jq -e . >/dev/null 2>&1 <<<"$json"; then
-                        IS_RUNNING=$(echo $json | jq .running)
-                        VERSION=$(echo $json | jq -r .version)
-                        SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
-                        if [ $IS_RUNNING = "true" ]; then
-                                WORLD=$(echo $json | jq -r .world)
-                                SYSTEM=$(echo $json | jq -r .system)
-                                log_daemon_msg "Foundry VTT v$VERSION is running."
-                                log_daemon_msg " System: ${SYSTEM}"
-                                log_daemon_msg " World: ${WORLD//-/ }"
+         IS_RUNNING=$($0 status --json=true | jq -r '.running')
+         if [[ $IS_RUNNING ]]; then
+                  VERSION=$($0 status --json=true | jq -r '.version')
+                  SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
+                  if [ $IS_RUNNING = "true" ]; then
+                        WORLD=$($0 status --json=true | jq -r .world)
+                        SYSTEM=$($0 status --json=true | jq -r .system)
+                        log_daemon_msg "Foundry VTT v$VERSION is running."
+                        log_daemon_msg " System: ${SYSTEM}"
+                        log_daemon_msg " World: ${WORLD//-/ }"
 
-                        else
-                                log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
-                        fi
-                        log_daemon_msg " ----------------- System Info -----------------"
-                        log_daemon_msg " Platform: ${LINUX_DISTRO} ${DISTRO_VERSION} ${CPU_ARCH} ${SUPPORT}."
-                        log_daemon_msg " Network $ETHERNET config:"
-                        log_daemon_msg "  Public IP: ${PUBLIC_IP}"
-                        log_daemon_msg "  Internal IP: ${LOCAL_IP}"
-                        log_daemon_msg "  Foundry VTT port: ${NGINX_PROD_PORT}/TCP"
-                        log_daemon_msg "  Public URL: ${WEB_PROTO}://${HOSTNAME}.${DOMAIN}/"
+                  else
+                        log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
+                  fi
+            log_daemon_msg " ----------------- System Info -----------------"
+            log_daemon_msg " Platform: ${LINUX_DISTRO} ${DISTRO_VERSION} ${CPU_ARCH} ${SUPPORT}."
+            log_daemon_msg " Network $ETHERNET config:"
+            log_daemon_msg "  Public IP: ${PUBLIC_IP}"
+            log_daemon_msg "  Internal IP: ${LOCAL_IP}"
+            log_daemon_msg "  Foundry VTT port: ${NGINX_PROD_PORT}/TCP"
+            log_daemon_msg "  Public URL: ${WEB_PROTO}://${HOSTNAME}.${DOMAIN}/"
 
-                        true
-                        log_end_msg $?
-                else
-                        false
-                        log_daemon_msg "Foundry VTT is not running."
-                        log_end_msg $?
-                fi
+            true
+            log_end_msg $?
          else
-                log_daemon_msg "Foundry VTT is not running."
-                log_end_msg $?      
+            false
+            log_daemon_msg "Foundry VTT is not running."
+            log_end_msg $?
          fi
       ;;
   restart)
@@ -698,21 +695,26 @@ case "$1" in
                   IS_ACTIVE=$(echo $json | jq -r .active)
 
                   if [[ $IS_RUNNING == "null" && $IS_ACTIVE == "true" ]]; then
+
+                        VERSION=$(echo "$json" | jq -r '.version')
+                        VTTWORLD=$(echo "$json" | jq -r '.world')
+                        VTTSYSTEM=$(echo "$json" | jq -r '.system')
+                        SYSTEM_VERSION=$(echo "$json" | jq -r '.systemVersion')
                         CURRENT_STATUS="true"
-                        VERSION=$(echo $json | jq -r .version)
-                  else
-                        CURRENT_STATUS="false"
+
+                  elif [[ ! $IS_RUNNING == "false" ]]; then
+                        CURRENT_STATUS="error"
                   fi
 
                   case $CURRENT_STATUS in
                         true)
-                              echo "{ \"running\": true, \"version\": \"$VERSION\"}"
+                              echo "{ \"running\": true, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
                               ;;
                         false)
                               echo "{ \"running\": false }"
                               ;;
                         *)
-                              echo "{ \"running\": false }"
+                              echo "{ \"running\": \"error\" }"
                               ;;
                   esac
             
