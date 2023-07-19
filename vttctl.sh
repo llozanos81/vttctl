@@ -21,9 +21,15 @@ function getVersion() {
     rm -rf $RESPONSE
     status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
     if [ $status == 200 ]; then
-        cat $RESPONSE
+        JSON=$(cat $RESPONSE)
+        IS_VALID=$()
+        if echo $JSON | jq -e . >/dev/null 2>&1; then
+            echo $JSON
+        elif [ ! $status == "200" ]; then
+            echo "{ \"running\": \"error\", \"http\": $status }"
+        fi
     else
-        echo "{ \"running\": \"error\" }"
+        echo "{ \"running\": \"error\", \"http\": $status }"
     fi
 }
 
@@ -269,7 +275,7 @@ function isPlatformSupported() {
             fi
       done
 
-      if [ ! $matchFoundSupported && ! $matchFoundNotSupported ]; then
+      if [[ ! $matchFoundSupported && ! $matchFoundNotSupported ]]; then
             echo "\e[93mnot tested\e[39m"
       fi
 }
@@ -700,13 +706,14 @@ case "$1" in
             docker exec -it $CONT_NAME pm2 monit
         ;;
   status)
-      json=$(getVersion)
       if [[ -n $2 && $2 == "--json=true" ]]; then     
+            json=$(getVersion)
             if [[ ! -z "$json" ]]; then
                   IS_RUNNING=$(echo $json | jq -r .running)
                   IS_ACTIVE=$(echo $json | jq -r .active)
 
                   if [[ $IS_RUNNING == "null" && $IS_ACTIVE == "true" ]]; then
+                        RUNNING="true"
                         VERSION=$(echo "$json" | jq -r '.version')
                         VTTWORLD=$(echo "$json" | jq -r '.world')
                         VTTSYSTEM=$(echo "$json" | jq -r '.system')
@@ -720,7 +727,7 @@ case "$1" in
 
                   case $CURRENT_STATUS in
                         true)
-                              echo "{ \"running\": ${IS_RUNNING}, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
+                              echo "{ \"running\": ${RUNNING}, \"version\": \"$VERSION\", \"world\": \"$VTTWORLD\", \"system\": \"$VTTSYSTEM\"}"
                               ;;
                         false)
                               echo "{ \"running\": false }"
