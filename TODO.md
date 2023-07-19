@@ -1,4 +1,5 @@
 # TODO
+- Validate download URL is the correct for Linux deployment
 - fix network interface detection ./vttctl.sh info
 - Add HTTPS support. (Caddy?)
 - Add support for Amazon Linux 2

@@ -455,7 +455,7 @@ case "$1" in
                   count=1
 
                   for VER in $VERSIONS; do
-                        if [ $VER = $DEFAULT_VER ]; then
+                        if [[ $VER == $DEFAULT_VER ]]; then
                               echo -e "$count) \e[1;32m$VER\e[0m"
                         else
                               echo "$count) $VER"
@@ -550,6 +550,7 @@ case "$1" in
                   docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d -e VARS=$VARS -e TAG=$TAG
             fi
             fixOnwer
+            sleep 1
             $0 info
             log_end_msg $?
          else
