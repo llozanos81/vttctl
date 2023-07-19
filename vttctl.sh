@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 0.01
+# Version: 0.02
 
 function stop() {
       CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
