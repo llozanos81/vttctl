@@ -24,7 +24,8 @@ RUN set -xe \
     && sed -i 's/data-action="update"/data-action="disabled"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
     && sed -i 's/data-tooltip="Update"/data-tooltip="Update disabled, Use VTTctl instead."/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
     && chown foundry:foundry -R /home/foundry/ \
-    && chmod +x /home/foundry/vtt/docker-entrypoint.sh
+    && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
+    && touch /home/foundry/.firstboot
 
 ENV TZ=${TIMEZONE}
 USER foundry

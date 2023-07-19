@@ -2,26 +2,28 @@
 # Version: 0.01
 
 function stop() {
-    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml stop
-    docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml stop
+      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      docker exec -it $CONT_NAME pm2 stop all
+      VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml stop
+      VARS="" docker-compose -p $DEV_PROJECT -f $VTT_HOME/docker/docker-compose-dev.yml stop
 }
 
 function getLogs() {
-    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs
+    docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs
 }
 
 function liveLogs() {
-    docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml logs -f
+    docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs -f
 }
 
 function getVersion() {
     RESPONSE=/tmp/.response.txt
     rm -rf $RESPONSE
-    status=$(curl -s -w %{http_code} http://127.0.0.1:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
+    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o $RESPONSE)
     if [ $status == 200 ]; then
         cat $RESPONSE
     else
-        echo "{ \"running\": false }"
+        echo "{ \"running\": \"Error\" }"
     fi
 }
 
@@ -30,10 +32,67 @@ function appReload() {
     docker exec -d $CONT_NAME pm2 restart foundry
 }
 
+function generateBackupListing() {
+      BACKUP_INDEX=$VTT_HOME/backups/FoundryVTT/index.html
+      echo "<html>
+      <head>
+      <title>Foundry VTT Backups</title>
+      </head>
+      <body>
+      <h1>Foundry VTT Backups</h1>
+      <table>
+      <thead>
+      <tr>
+      <th>BackupFile</th>
+      <th>Version</th>
+      <th>Date</th>
+      <th>Size</th>
+      <th>md5sum</th>
+      </tr>
+      </thead>
+      <tbody>" > $BACKUP_INDEX
+
+      # Extract version, date, and size information for tar and tar.gz files
+      files=$(ls -hal $VTT_HOME/backups/FoundryVTT/ | awk '/^.*\.tar(\.gz)?$/ {print}')
+      while IFS= read -r line; do
+            file=$(echo "$line" | awk '{print $9}')
+            version=$(echo "$file" | awk -F"[_.-]" '{match($0, /[0-9]+\.[0-9]{3}/, v); print v[0]}')
+            raw_date=$(echo "$file" | awk -F"[_.-]" '{match($0, /[0-9]{4}[0-9]{2}[0-9]{2}/, d); print d[0]}')
+            date=$(date -d "$raw_date" +'%Y-%m-%d')
+            size=$(echo "$line" | awk '{print $5}')
+            md5=$(md5sum $VTT_HOME/backups/FoundryVTT/$file | awk {'print $1'} )
+            echo "<tr>
+            <td><a href=\"$file\">$file</a></td>
+            <td>$version</td>
+            <td>$date</td>
+            <td>$size</td>
+            <td>$md5</td>
+            </tr>" >> $BACKUP_INDEX
+      done <<< "$files"
+
+      echo "</tbody>
+      </table>
+      </body>
+      </html>" >> $BACKUP_INDEX
+
+}
+
+function progressCursor() {
+            i=1
+            sp="/-\|"
+            echo -n ' '
+            while [ -d /proc/$1 ]; do
+                printf "\r%c" "${sp:0:1}"
+                sp="${sp:1}${sp:0:1}"
+                sleep 0.05
+            done
+}
+
 function prodBackup()  {
-    METADATA="backups/FoundryVTT/metadata.json"
-    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
-    json=$(getVersion)
+      BACKUP_HOME="${VTT_HOME}/backups/FoundryVTT/"
+      METADATA_FILE="${BACKUP_HOME}metadata.json"
+      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      json=$(getVersion)
     if jq -e . >/dev/null 2>&1 <<<"$json"; then
         PROD_VER=$(echo $json | jq -r .version)
         if [[ -n $PROD_VER ]]; then
@@ -43,35 +102,54 @@ function prodBackup()  {
             docker run \
                 --rm \
                 -v foundryvtt_prod_UserData:/source/ \
-                -v $(pwd)/backups/FoundryVTT/:/backup \
+                -v $BACKUP_HOME:/backup \
                 busybox \
                 ash -c " \
                 tar -cvf /backup/$BACKUP_FILE \
-                    -C / /source \
-                ; chown $UID:$GID /backup/$BACKUP_FILE" >/dev/null 2>&1 &
+                    -C / /source "
+            docker run \
+                --rm \
+                -v $BACKUP_HOME:/backup \
+                busybox \
+                ash -c "chown $UID:$GID /backup/$BACKUP_FILE" 
 
-            BACKPID=$!
+            #BACKPID=$!
+            #progressCursor "$BACKUPID"
 
-            i=1
-            sp="/-\|"
-            echo -n ' '
-            while [ -d /proc/$BACKPID ]; do
-                printf "\r%c" "${sp:0:1}"
-                sp="${sp:1}${sp:0:1}"
-                sleep 0.05
+            DATE_FILE=$(stat --format="%y" "$BACKUP_HOME/$BACKUP_FILE" | awk {'print $1'})
+
+            if [[ -f "$METADATA_FILE" ]]; then
+                  rm "$METADATA_FILE"
+            fi
+
+            shopt -s nullglob
+
+            echo "{" > "$METADATA_FILE"
+
+            first_file=true
+
+            for filename in "$BACKUP_HOME"*.tar "$BACKUP_HOME"*.tar.gz; do
+                  if [[ -f "$filename" ]]; then
+                        version=$(basename "$filename" | awk -F '[._-]' '{print $(NF-3)"."$(NF-2)}')
+                        date=$(basename "$filename" | grep -oE '[0-9]{8}' | head -n1)
+                        size=$(stat -c "%s" "$filename")
+                        size_mb=$(awk -v size="$size" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')  # Rounding up the size and removing decimal places
+
+                        if [[ "$first_file" == false ]]; then
+                              echo "," >> "$METADATA_FILE"
+                        else
+                              first_file=false
+                        fi
+
+                        echo "\"$date\": { \"version\":\"$version\", \"filename\":\"${WEB_PROTO}://${FQDN}/backups/$(basename "$filename")\", \"size\":\"$size_mb MB\" }" >> "$METADATA_FILE"
+                  fi
             done
 
-            DATE_FILE=$(stat --format="%y" "backups/FoundryVTT/$BACKUP_FILE" | awk {'print $1'})
-            new_object="{\"$DATE_FILE\": {\"Version\": \"${PROD_VER}\", \"File\": \"${BACKUP_FILE}\"}}"
-            python3 -c "import json; \
-                        obj = $new_object; \
-                        filename = '${METADATA}'; \
-                        data = json.load(open(filename)) \
-                        if filename else []; \
-                        data.append(obj) \
-                        if obj not in data else None; \
-                        json.dump(data, open(filename, 'w'), indent=2)"
-            printf "\r   - %s backup file created\n" "$BACKUP_FILE"
+            echo "}" >> "$METADATA_FILE"
+
+            printf "\r   - %s backup file created.\n" "$BACKUP_FILE"
+            generateBackupListing
+            echo "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
             echo "   - Done!."
         fi
     fi
@@ -98,7 +176,7 @@ function devLatestRestore() {
     docker run \
                 --rm \
                 --volumes-from $CONT_NAME \
-                -v $(pwd)/backups/FoundryVTT/:/backup \
+                -v $VTT_HOME/backups/FoundryVTT/:/backup \
                 busybox \
                 tar -xvf /backup/${FILE_NAME} -C /
 
@@ -191,15 +269,26 @@ elif [ -f ${ENV_FILE} ]; then
       export $(cat .env | xargs)
 fi
 
+# App Variables
 VTT_NAME=FoundryVTT
 NAME=${VTT_NAME}
-DESC=Environment
 PROD_PROJECT="${NAME}_prod"
 PROD_PROJECT=${PROD_PROJECT,,}
 DEV_PROJECT="${NAME}_dev"
 DEV_PROJECT=${DEV_PROJECT,,}
 REGEX_URL='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
+FQDN=${HOSTNAME}.${DOMAIN}
+if [ $SSL_ENABLED == "true" ]; then
+      WEB_PROTO="https"
+else
+      WEB_PROTO="http"
+fi
+
+# OS Variables
+DESC=Environment
+
+VTT_HOME=$(pwd)
 GID=$(getent passwd $USER | awk -F: '{print $4}')
 CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
 TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
@@ -207,14 +296,14 @@ LOCAL_IP=$(getIPaddr)
 ETHERNET=$(ip add | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
-if ! command -v "lsb_release" >/dev/null 2>&1; then
+if ! type "lsb_release" >/dev/null 2>&1; then
       LINUX_DISTRO="N/A lsb_release missing"
 else
       LINUX_DISTRO=$(lsb_release -sir | head -1)
       DISTRO_VERSION=$(lsb_release -sir | tail -1)
 fi
 
-if ! command -v "uname" >/dev/null 2>&1; then
+if ! type "uname" >/dev/null 2>&1; then
       CPU_ARCH="N/A uname missing."
 else
       CPU_ARCH=$(uname -m)
@@ -425,13 +514,14 @@ case "$1" in
                 sed
                 sort
                 timedatectl
+                uname
                 unzip
                 wc
                 wget
                 xargs)
 
       for cmd in "${commands[@]}"; do
-       if ! command -v "$cmd" >/dev/null 2>&1; then
+       if ! type "$cmd" >/dev/null 2>&1; then
         log_daemon_msg " - Command not found: $cmd"
         false
         log_end_msg $?  
@@ -453,9 +543,11 @@ case "$1" in
   start)
         if [[ -n $DEFAULT_VER ]]; then
             log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
-            TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
+            VARS=$(echo "FQDN=${FQDN}|PROXY_PORT=${PUBLIC_PROD_PORT} | base64")
+
+            TAG=$TAG VARS=$VARS docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
             if [ "$DEV_ENABLED" == "true" ]; then
-                  TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d
+                  docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml up -d -e VARS=$VARS -e TAG=$TAG
             fi
             fixOnwer
             $0 info
@@ -467,8 +559,8 @@ case "$1" in
          fi
         ;;
   stop)
-        IS_RUNNING=$( $0 status --json=true | jq -r '.running')
-        if [ $IS_RUNNING == "" ]; then
+        IS_RUNNING=$($0 status --json=true | jq -r '.running')
+        if [[ "$IS_RUNNING" == "null" ]]; then
             RUNNING_VERSION=$($0 status --json=true | jq -r .version)
             log_daemon_msg "Stopping $DESC" "$NAME $RUNNING_VERSION."   
             stop
@@ -495,10 +587,10 @@ case "$1" in
          json=$(getVersion)
          if [[ ! -z "$json" ]]; then
                 if jq -e . >/dev/null 2>&1 <<<"$json"; then
-                        IS_ACTIVE=$(echo $json | jq .active)
+                        IS_RUNNING=$(echo $json | jq .running)
                         VERSION=$(echo $json | jq -r .version)
                         SUPPORT=$(isPlatformSupported $LINUX_DISTRO $DISTRO_VERSION $CPU_ARCH)
-                        if [ $IS_ACTIVE = "true" ]; then
+                        if [ $IS_RUNNING = "true" ]; then
                                 WORLD=$(echo $json | jq -r .world)
                                 SYSTEM=$(echo $json | jq -r .system)
                                 log_daemon_msg "Foundry VTT v$VERSION is running."
@@ -508,12 +600,13 @@ case "$1" in
                         else
                                 log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
                         fi
-                        log_daemon_msg " --------------- System Info ---------------"
+                        log_daemon_msg " ----------------- System Info -----------------"
                         log_daemon_msg " Platform: ${LINUX_DISTRO} ${DISTRO_VERSION} ${CPU_ARCH} ${SUPPORT}."
                         log_daemon_msg " Network $ETHERNET config:"
                         log_daemon_msg "  Public IP: ${PUBLIC_IP}"
                         log_daemon_msg "  Internal IP: ${LOCAL_IP}"
-                        log_daemon_msg "  FoundryVTT port: TCP/${NGINX_PROD_PORT}"
+                        log_daemon_msg "  Foundry VTT port: ${NGINX_PROD_PORT}/TCP"
+                        log_daemon_msg "  Public URL: ${WEB_PROTO}://${HOSTNAME}.${DOMAIN}/"
 
                         true
                         log_end_msg $?
@@ -601,12 +694,34 @@ case "$1" in
       if [[ -n $2 && $2 == "--json=true" ]]; then     
             if [[ ! -z "$json" ]]; then
                   IS_RUNNING=$(echo $json | jq -r .running)
-                  if [[ -n "$IS_RUNNING" && "$IS_RUNNING" == "true" ]]; then
+                  IS_ACTIVE=$(echo $json | jq -r .active)
+
+                  if [[ $IS_RUNNING == "null" && $IS_ACTIVE == "true" ]]; then
+                        CURRENT_STATUS="true"
                         VERSION=$(echo $json | jq -r .version)
-                        echo "{ \"running\": true, \"version\": \"$VERSION\"}"
                   else
-                        echo "{ \"running\": false }"
+                        CURRENT_STATUS="false"
                   fi
+
+                  case $CURRENT_STATUS in
+                        true)
+                              echo "{ \"running\": true, \"version\": \"$VERSION\"}"
+                              ;;
+                        false)
+                              echo "{ \"running\": false }"
+                              ;;
+                        *)
+                              echo "{ \"running\": false }"
+                              ;;
+                  esac
+            
+
+                  #if [[ -n "$IS_RUNNING" && "$IS_RUNNING" == "true" ]]; then
+                  #      VERSION=$(echo $json | jq -r .version)
+                  #      echo "{ \"running\": true, \"version\": \"$VERSION\"}"
+                  #else
+                  #      echo "{ \"running\": false }"
+                  #fi
             fi
       else
             echo "Foundry VTT version $DEFAULT_VER enabled"

@@ -13,6 +13,8 @@ services:
     app:
       user: 3000:3000
       restart: always
+      environment:
+       - VARS=${VARS}
       image: foundryvtt:${TAG:-latest}
       volumes:
        - UserData:/home/foundry/userdata
@@ -20,7 +22,6 @@ services:
        - shared_ivan-duch-music-packs:/home/foundry/userdata/Data/modules/ivan-duch-music-packs/
        - shared_tabletop-rpg-music:/home/foundry/userdata/Data/modules/tabletop-rpg-music/
        - shared_michaelghelfi:/home/foundry/userdata/Data/modules/michaelghelfi/
-       - ../backups/FoundryVTT:/home/foundry/vtt/resources/app/public/backups/:ro
       networks:
        - internal_A
     web:
