@@ -311,7 +311,7 @@ GID=$(getent passwd $USER | awk -F: '{print $4}')
 CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
 TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
 LOCAL_IP=$(getIPaddr)
-ETHERNET=$(ip add | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
+ETHERNET=$(ip add | grep -v altname | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
 if ! type "lsb_release" >/dev/null 2>&1; then
