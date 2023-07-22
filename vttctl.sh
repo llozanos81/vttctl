@@ -43,9 +43,14 @@ function generateBackupListing() {
       echo "<html>
       <head>
       <title>Foundry VTT Backups</title>
+      <link rel="icon" href="../icons/vtt.png">
+      <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
       </head>
       <body>
-      <h1>Foundry VTT Backups</h1>
+      <div id="main-background"></div>
+      <header id="main-header" class="flexcol">
+            <h1>Foundry VTT Backups</h1>
+      </header>
       <table>
       <thead>
       <tr>
@@ -690,11 +695,26 @@ case "$1" in
 
                   FILE=$(basename "$2" | awk -F\? {'print $1'})
                   rm -rf "${DEST}/${VERSION}" >/dev/null 2>&1;
-                  wget -O downloads/$FILE $2
-                  echo "Extracting $FILE to ${TARGET}/ ..."
-                  unzip -qq -o downloads/$FILE -d ${TARGET}/
-                  VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
-                  cp ${DEST}/docker-entrypoint.sh ${TARGET}
+
+                  # Validate the first URL
+                  echo $2 | grep -i -q "\.zip$"
+
+                  # Check the exit code of the previous command
+                  if [ $? -eq 0 ]; then
+                        # The file is a ZIP file, proceed with downloading
+                        echo "The file is a ZIP file. Starting download..."
+                        curl -o downloads/$FILE "$2"
+                        echo "Download completed."
+
+                        echo "Extracting $FILE to ${TARGET}/ ..."
+                        unzip -qq -o downloads/$FILE -d ${TARGET}/
+                        VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
+                        cp ${DEST}/*.sh ${TARGET}
+
+                  else
+                        # The file is not a ZIP file or has other extensions
+                        echo -e "\nThe file is not a ZIP file or has other extensions. Please use TIMED URL for Linux/NodeJS. Aborting download."
+                  fi
             else
                   echo "Version $MAJOR_VER not supported."
             fi
@@ -827,8 +847,7 @@ case "$1" in
         ;;
 esac
 
-
-
+exit 1
 
 
 

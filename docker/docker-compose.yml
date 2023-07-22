@@ -22,6 +22,7 @@ services:
        - shared_ivan-duch-music-packs:/home/foundry/userdata/Data/modules/ivan-duch-music-packs/
        - shared_tabletop-rpg-music:/home/foundry/userdata/Data/modules/tabletop-rpg-music/
        - shared_michaelghelfi:/home/foundry/userdata/Data/modules/michaelghelfi/
+       - shared_dransky-lost-mines-maps:/home/foundry/userdata/Data/modules/dransky-lost-mines-maps/
       networks:
        - internal_A
     web:
@@ -45,6 +46,8 @@ volumes:
         name: shared_tabletop-rpg-music
     shared_michaelghelfi:
         name: shared_michaelghelfi
+    shared_dransky-lost-mines-maps:
+        name: shared_dransky-lost-mines-maps
 
 networks:
     internal_A:
