@@ -31,6 +31,7 @@ services:
       volumes:
         - ./nginx/foundry.conf:/etc/nginx/templates/default.conf.template:ro
         - ../backups/FoundryVTT:/var/www/backups/:ro
+        - ./nginx/critical_fail.html:/var/www/critical_fail.html:ro
       ports:
         - "${NGINX_PROD_PORT}:80/tcp"
       networks:
