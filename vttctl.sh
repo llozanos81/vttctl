@@ -1,19 +1,22 @@
-#!/usr/bin/env bash
-# Version: 0.02
+#!/bin/bash
+# Version: 0.03
+
+VTT_HOME=$(pwd)
+ENV_FILE="${VTT_HOME}/.env"
 
 function stop() {
-      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
       docker exec -it $CONT_NAME pm2 stop all
       VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml stop
       VARS="" docker-compose -p $DEV_PROJECT -f $VTT_HOME/docker/docker-compose-dev.yml stop
 }
 
 function getLogs() {
-    docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs
+    VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs
 }
 
 function liveLogs() {
-    docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs -f
+    VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs -f
 }
 
 function getVersion() {
@@ -34,16 +37,20 @@ function getVersion() {
 }
 
 function appReload() {
-    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
     docker exec -d $CONT_NAME pm2 restart foundry
+    log_daemon_msg "FoundryVTT nodejs application reloaded."
 }
 
 function generateBackupListing() {
       BACKUP_INDEX=$VTT_HOME/backups/FoundryVTT/index.html
-      echo "<html>
+      echo '<!DOCTYPE html>
+      <html lang="en">
       <head>
       <title>Foundry VTT Backups</title>
+      <meta name="robots" content="noindex, nofollow">
       <link rel="icon" href="../icons/vtt.png">
+      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
       <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
       </head>
       <body>
@@ -61,7 +68,7 @@ function generateBackupListing() {
       <th>md5sum</th>
       </tr>
       </thead>
-      <tbody>" > $BACKUP_INDEX
+      <tbody>' > $BACKUP_INDEX
 
       # Extract version, date, and size information for tar and tar.gz files
       files=$(ls -hal $VTT_HOME/backups/FoundryVTT/ | awk '/^.*\.tar(\.gz)?$/ {print}')
@@ -83,6 +90,10 @@ function generateBackupListing() {
 
       echo "</tbody>
       </table>
+      <h2>Go to <a href=\"/setup\">Setup</a></h2>
+      <footer id=\"watermark\" class=\"flexcol\">
+            <p id=\"software-version\">VTTctl Version ${MAJOR_VER}.${MINOR_VER} Build ${BUILD_VER}</p>
+      </footer>
       </body>
       </html>" >> $BACKUP_INDEX
 
@@ -100,16 +111,15 @@ function progressCursor() {
 }
 
 function prodBackup()  {
-      BACKUP_HOME="${VTT_HOME}/backups/FoundryVTT/"
       METADATA_FILE="${BACKUP_HOME}metadata.json"
-      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
       json=$(getVersion)
     if jq -e . >/dev/null 2>&1 <<<"$json"; then
         PROD_VER=$(echo $json | jq -r .version)
         if [[ -n $PROD_VER ]]; then
             DATESTAMP=$(date +"%Y%m%d")
             BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
-
+            docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml stop app
             docker run \
                 --rm \
                 -v foundryvtt_prod_UserData:/source/ \
@@ -161,7 +171,6 @@ function prodBackup()  {
             printf "\r   - %s backup file created.\n" "$BACKUP_FILE"
             generateBackupListing
             echo "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
-            echo "   - Done!."
         fi
     fi
 }
@@ -182,7 +191,7 @@ function prodLatestRestore() {
 function devLatestRestore() {
     REST_FILE=$(ls -t backups/*tar | head -1)
     FILE_NAME=$(basename ${REST_FILE})
-    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep dev | awk '{print $1}')
+    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
     
     docker run \
                 --rm \
@@ -194,12 +203,12 @@ function devLatestRestore() {
 }
 
 function fixOnwer() {
-    CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
     docker run --rm --volumes-from ${CONT_NAME} busybox chown 3000:3000 -R /home/foundry/userdata
 }
 
 function fixConfig() {
-      CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+      CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
       docker run --rm --volumes-from ${CONT_NAME} busybox ash -c \
             "sed -i 's/\"upnp\": true/\"upnp\": false/' /home/foundry/userdata/Config/options.json"
 }
@@ -222,7 +231,7 @@ function getReleases() {
     # Extract the release versions from stable <li> elements
     release_versions=$(echo "$stable_li_elements" | grep -oP '(?<=<a href="/releases/)(9|[1-9][0-9]+)\.\d+')
     
-    file_path="FoundryVTT/foundry_releases.json"
+    file_path="${VTT_HOME}/FoundryVTT/foundry_releases.json"
     max_age_days=1
     file_age=$(($(date +%s) - $(date -r "$file_path" +%s)))
  
@@ -230,18 +239,18 @@ function getReleases() {
     current_version=""
 
     while IFS= read -r line; do
-    version=$(echo "$line" | awk -F '.' '{print $1}')
-    build=$(echo "$line" | awk -F '.' '{print $2}')
+      version=$(echo "$line" | awk -F '.' '{print $1}')
+      build=$(echo "$line" | awk -F '.' '{print $2}')
 
-    if [[ "$version" != "$current_version" ]]; then
-        versions+=("{\"version\":\"$version\",\"build\":[{\"number\":$build,\"latest\":false}]}")
-        current_version=$version
-    else
-        index=$((${#versions[@]} - 1))
-        versions[$index]=$(jq ".build += [{\"number\":$build,\"latest\":false}]" <<< "${versions[$index]}")
-        last_index=$(($index - 1))
-        versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
-    fi
+      if [[ "$version" != "$current_version" ]]; then
+            versions+=("{\"version\":\"$version\",\"build\":[{\"number\":$build,\"latest\":false}]}")
+            current_version=$version
+      else
+            index=$((${#versions[@]} - 1))
+            versions[$index]=$(jq ".build += [{\"number\":$build,\"latest\":false}]" <<< "${versions[$index]}")
+            last_index=$(($index - 1))
+            versions[$last_index]=$(jq ".build[-1].latest=true" <<< "${versions[$last_index]}")
+      fi
     done <<< "$output"
 
     last_index=$((${#versions[@]} - 1))
@@ -285,11 +294,11 @@ function isPlatformSupported() {
       fi
 }
 
-ENV_FILE=.env
-if [ ! -f .env ] && [ $1 != "validate" ]; then
+
+if [ ! -f ${ENV_FILE} ] && [ $1 != "validate" ]; then
       $0 validate
 elif [ -f ${ENV_FILE} ]; then
-      export $(cat .env | xargs)
+      export $(cat ${ENV_FILE} | xargs)
 fi
 
 # App Variables
@@ -308,10 +317,12 @@ else
       WEB_PROTO="http"
 fi
 
+
 # OS Variables
 DESC=Environment
 
-VTT_HOME=$(pwd)
+
+BACKUP_HOME="${VTT_HOME}/backups/FoundryVTT/"
 GID=$(getent passwd $USER | awk -F: '{print $4}')
 CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
 TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
@@ -368,8 +379,12 @@ fi
 
 case "$1" in
   attach)
-        APP_CONTAINER=$(docker container ls -a | grep vtt | grep app | awk '{print $1}')
-        docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT $DEFAULT_VER app container ...;ash"
+        APP_CONTAINER=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
+        RUNNING_VER=$(docker container ls -a | awk '/vtt/ && /app/ { split($2, a, ":"); print a[2] }')
+        docker exec -it $APP_CONTAINER ash -c "echo Attaching to FoundryVTT $RUNNING_VER app container ...;/bin/ash"
+        log_daemon_msg "Detaching from FoundryVTT $RUNNING_VER app container."
+        log_end_msg $?
+        exit 1
         ;;
   build)
       log_daemon_msg "Building $DESC" "$NAME"
@@ -457,8 +472,8 @@ case "$1" in
   clean)  
         $0 stop
         echo "Deleting FoundryVTT containers ..."
-        TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
-        TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
+        VARS="" TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
+        VARS="" TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
         ;;
   default)
         if [ ! -n $DEFAULT_VER ]; then
@@ -509,7 +524,67 @@ case "$1" in
             esac
         done
         exit      
-        ;; 
+        ;;
+  download)
+        if [[ $2 =~ $REGEX_URL ]]; then 
+            VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
+            MAJOR_VER="${VERSION%%.*}"
+            if [[ $MAJOR_VER -ge 9 ]]; then
+                  DEST="${VTT_HOME}/FoundryVTT"
+                  count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
+                  if [ $count -gt 9 ]; then
+                        log_failure_msg "To many downloaded FoundryVTT binaries, please do $0 clean and remove at least 1 old version."
+                        break
+                  fi
+
+                  FILE=$(basename "$2" | awk -F\? {'print $1'})
+                  # Validate the URL if contains ZIP file
+                  echo $2 | grep -E "/[^/]*\.zip\?AWSAccessKeyId" >/dev/null 2>&1;
+
+                  # Check the exit code of the previous command
+                  if [ $? -eq 0 ]; then
+                        # The file is a ZIP file, proceed with downloading
+                        log_daemon_msg " The file is a ZIP file. Starting download..."
+                        curl -# -o "${VTT_HOME}/downloads/$FILE" "$2"
+                        log_daemon_msg " Download completed."
+
+                        $0 extract $VERSION
+                  else
+                        # The file is not a ZIP file or has other extensions
+                        log_failure_msg -e "\nThe file is not a ZIP file or has other extensions. Please use TIMED URL for Linux/NodeJS. Aborting download."
+                  fi
+            else
+                  log_failure_msg "Version $MAJOR_VER not supported."
+            fi
+        else
+            echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\"."
+        fi
+        ;;
+  extract)
+      VERSION=$2
+      DEST="FoundryVTT"
+      TARGET="${VTT_HOME}/${DEST}/${VERSION}"
+      FILE="FoundryVTT-$VERSION.zip"
+      rm -rf $TARGET >/dev/null 2>&1;
+      log_daemon_msg "Extracting $FILE"
+      log_daemon_msg " Destination ${TARGET}/"
+      ZIP_PATH=${VTT_HOME}/downloads/${FILE}
+      if [ -e $ZIP_PATH ]; then
+            unzip -qq -o $ZIP_PATH -d ${TARGET}/
+            VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
+            cp ${VTT_HOME}/${DEST}/*.sh ${TARGET}
+            log_daemon_msg " ${FILE} contents extracted and ready to build."
+      else
+            log_failure_msg "${FILE} does not exists in downloads, please download the ZIP form foundryvtt.com."
+      fi
+      ;;
+  fix)
+        log_daemon_msg "Fixing permissions for Foundry VTT."
+        fixOnwer
+        fixConfig
+        $0 reload
+        log_end_msg $?      
+        ;;
   validate)
       log_daemon_msg "Validating requirements ..."
       if [ ! -d backups ]; then
@@ -540,7 +615,6 @@ case "$1" in
                 uname
                 unzip
                 wc
-                wget
                 xargs)
 
       for cmd in "${commands[@]}"; do
@@ -566,7 +640,7 @@ case "$1" in
   start)
         if [[ -n $DEFAULT_VER ]]; then
             log_daemon_msg "Starting $DESC" "$NAME $DEFAULT_VER"
-            VARS=$(echo "FQDN=${FQDN}|PROXY_PORT=${PUBLIC_PROD_PORT} | base64")
+            VARS=$(echo "FQDN=${FQDN}|PROXY_PORT=${PUBLIC_PROD_PORT}" | base64)
 
             TAG=$TAG VARS=$VARS docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml up -d
             if [ "$DEV_ENABLED" == "true" ]; then
@@ -595,7 +669,8 @@ case "$1" in
             log_daemon_msg " Foundry VTT not running."
         fi  
         log_end_msg $?
-        ;;
+        exit
+    ;;
 
   logs)
         if [[ -n $2 && $2 == "--live" ]]; then
@@ -649,20 +724,40 @@ case "$1" in
         ;;
   backup)
         IS_RUNNING=$($0 status --json=true | jq -r .running)
-        if [ $IS_RUNNING ]; then
-            RUNNING_VERSION=$($0 status --json=true | jq -r .version)
-            log_daemon_msg "Backing up Foundry VTT $RUNNING_VERSION."   
-           prodBackup
+        if [[ $IS_RUNNING && ! $IS_RUNNING == "error" ]]; then
+            RUNNING_VER=$($0 status --json=true | jq -r .version)
+            log_daemon_msg "Backing up Foundry VTT $RUNNING_VER."   
+            prodBackup
+            log_daemon_msg " Done."
+            $0 start
         else
             echo " - Foundry VTT not running."
+            $0 start
+            sleep 1
+            $0 backup
+            $0 start
         fi
         
         log_end_msg $?      
         ;;
   restore)
+        
+        file_array=("$BACKUP_HOME"/*.tar)
         log_daemon_msg "Restoring up Foundry VTT."
-        prodLatestRestore
-        $0 reload
+        #prodLatestRestore
+        #$0 reload
+        for ((i=0; i<${#file_array[@]}; i++)); do
+            filename=$(basename ${file_array[i]})
+
+            version="${filename#foundry_userdata_}"   # Remove the prefix 'foundry_userdata_'
+            version="${version%%-*}"  
+
+            filedate="${filename#*-}"                  # Remove the prefix until the first '-'
+            filedate="${filedate%.tar}"
+            human_readable_date=$(date -d "$filedate" +"%b %d, %Y")
+
+            echo "$((i+1))) $version - $human_readable_date"
+        done
         log_end_msg $?      
         ;;
   restoredev)
@@ -671,57 +766,7 @@ case "$1" in
         $0 reload
         log_end_msg $?      
         ;;
-  fix)
-        log_daemon_msg "Fixing permissions for Foundry VTT."
-        fixOnwer
-        fixConfig
-        $0 reload
-        log_end_msg $?      
-        ;;
 
-  download)
-        if [[ $2 =~ $REGEX_URL ]]; then 
-            VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
-            MAJOR_VER="${VERSION%%.*}"
-            if [[ $MAJOR_VER -ge 9 ]]; then
-                  DEST="FoundryVTT"
-                  count=$(find $DEST/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
-                  if [ $count -gt 9 ]; then
-                        echo "To many downloaded FoundryVTT binaries, please do $0 clean and remove at least 1 old version."
-                        break
-                  fi
-                  
-                  TARGET="${DEST}/${VERSION}"
-
-                  FILE=$(basename "$2" | awk -F\? {'print $1'})
-                  rm -rf "${DEST}/${VERSION}" >/dev/null 2>&1;
-
-                  # Validate the first URL
-                  echo $2 | grep -i -q "\.zip$"
-
-                  # Check the exit code of the previous command
-                  if [ $? -eq 0 ]; then
-                        # The file is a ZIP file, proceed with downloading
-                        echo "The file is a ZIP file. Starting download..."
-                        curl -o downloads/$FILE "$2"
-                        echo "Download completed."
-
-                        echo "Extracting $FILE to ${TARGET}/ ..."
-                        unzip -qq -o downloads/$FILE -d ${TARGET}/
-                        VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
-                        cp ${DEST}/*.sh ${TARGET}
-
-                  else
-                        # The file is not a ZIP file or has other extensions
-                        echo -e "\nThe file is not a ZIP file or has other extensions. Please use TIMED URL for Linux/NodeJS. Aborting download."
-                  fi
-            else
-                  echo "Version $MAJOR_VER not supported."
-            fi
-        else
-            echo "Usage: $0 download \"Foundry VTT Linux/NodeJS download timed URL\""
-        fi
-        ;;
   monitor)
             CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
             docker exec -it $CONT_NAME pm2 monit
@@ -842,7 +887,7 @@ case "$1" in
       done
       ;;
   *)
-        log_failure_msg "Usage: $N {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
+        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
         exit 1
         ;;
 esac

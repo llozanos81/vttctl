@@ -25,7 +25,6 @@
 - uname
 - unzip
 - wc
-- wget
 - xargs
 
 ## Usage
