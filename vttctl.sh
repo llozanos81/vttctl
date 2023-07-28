@@ -54,6 +54,14 @@ function generateBackupListing() {
       <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
       <link href="css/style.css" rel="stylesheet" type="text/css" media="all">
       '
+      case "$1" in
+            9)
+            CSS=$CSS_V9
+            ;;
+            11)
+            CSS=$CSS_V11
+            ;;
+      esac
 
       echo '<!DOCTYPE html>
       <html lang="en">
@@ -436,9 +444,10 @@ case "$1" in
 
         if [[ $IS_RUNNING && ! $IS_RUNNING == "error" && $IS_ACTIVE ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
+            MAJOR_VER="${RUNNING_VER%%.*}"
             log_daemon_msg "Backing up Foundry VTT $RUNNING_VER."   
             start_time=$(date +%s)
-            prodBackup
+            prodBackup $MAJOR_VER
             end_time=$(date +%s)
             duration=$((end_time - start_time))
 
