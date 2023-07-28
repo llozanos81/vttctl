@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Foundry VTT Backups</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" href="../icons/vtt.png">
+    <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
+    <link href="../css/style.css" rel="stylesheet" type="text/css" media="all">
+    <script>
+        function refreshPage() {
+            setTimeout(function() {
+                window.location.reload();
+            }, {{BACKUP_REFRESH}});
+        }
+
+            refreshPage();
+    </script>
+</head>
+<body class="vtt setup" style>
+    <section id="setup">
+    <header>
+        <h1>Foundry VTT Backups</h1>
+    </header>
+    <table>
+        <thead>
+        <tr>
+        <th>BackupFile</th>
+        <th>Version</th>
+        <th>Date</th>
+        <th>Size</th>
+        <th>md5sum</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{BACKUP_FILE_TABLE}}
+        </tbody>
+    </table>
+    <h2>Go back to <a href="/setup">setup</a></h2>
+    </section>
+    <footer id="watermark">
+        <ps>VTTctl Version {{VTTCTL_MAJ}}.{{VTTCTL_MIN}} Build {{VTTCTL_BUILD}}</p>
+    </footer>
+</body>
+</html>

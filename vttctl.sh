@@ -43,64 +43,13 @@ function appReload() {
 }
 
 function generateBackupListing() {
-      BACKUP_INDEX=$VTT_HOME/backups/FoundryVTT/index.html
+      BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
+      BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${MAJOR_VER}.hbs"
 
-      CSS_V11='
-      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
-      <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
-      '
-
-      CSS_V9='
-      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
-      <link href="../css/style.css" rel="stylesheet" type="text/css" media="all">
-      '
-
-      case "$MAJOR_VER" in
-            9)
-            CSS=$CSS_V9
-            ;;
-            11)
-            CSS=$CSS_V11
-            ;;
-      esac
-
-      echo '<!DOCTYPE html>
-      <html lang="en">
-      <head>
-      <title>Foundry VTT Backups</title>
-      <meta name="robots" content="noindex, nofollow">
-      <link rel="icon" href="../icons/vtt.png">' > $BACKUP_INDEX
-      echo $CSS >> $BACKUP_INDEX
-      echo '
-      <script>
-        function refreshPage() {
-            setTimeout(function() {
-                window.location.reload();'  >> $BACKUP_INDEX
-      echo "            }, ${BACKUP_REFRESH}); // Refresh the page every 5 seconds (adjust the time as needed)"  >> $BACKUP_INDEX
-      echo '  }
-
-        refreshPage(); // Call the function to start the refresh
-      </script>
-      </head>
-      <body>
-      <div id="main-background"></div>
-      <header id="main-header" class="flexcol">
-            <h1>Foundry VTT Backups</h1>
-      </header>
-      <table>
-      <thead>
-      <tr>
-      <th>BackupFile</th>
-      <th>Version</th>
-      <th>Date</th>
-      <th>Size</th>
-      <th>md5sum</th>
-      </tr>
-      </thead>
-      <tbody>' >> $BACKUP_INDEX
+      BACKUP_FILE_TABLE=""
 
       # Extract version, date, and size information for tar and tar.gz files
-      files=$(ls -hal $VTT_HOME/backups/FoundryVTT/ | awk '/^.*\.tar(\.gz)?$/ {print}')
+      files=$(ls -hal "$VTT_HOME/backups/FoundryVTT/" | awk '/^.*\.tar(\.gz|\.bz2)?$/ {print}')
       while IFS= read -r line; do
             file=$(echo "$line" | awk '{print $9}')
             version=$(echo "$file" | awk -F"[_.-]" '{match($0, /[0-9]+\.[0-9]{3}/, v); print v[0]}')
@@ -108,23 +57,25 @@ function generateBackupListing() {
             date=$(date -d "$raw_date" +'%Y-%m-%d')
             size=$(echo "$line" | awk '{print $5}')
             md5=$(md5sum $VTT_HOME/backups/FoundryVTT/$file | awk {'print $1'} )
-            echo "<tr>
-            <td><a href=\"$file\">$file</a></td>
+            BACKUP_FILE_TABLE="$BACKUP_FILE_TABLE<tr>
+            <td><a href='$file'>$file</a></td>
             <td>$version</td>
             <td>$date</td>
             <td>$size</td>
             <td>$md5</td>
-            </tr>" >> $BACKUP_INDEX
+            </tr>"
       done <<< "$files"
 
-      echo "</tbody>
-      </table>
-      <h2>Go back to <a href=\"/setup\">setup</a></h2>
-      <footer id=\"watermark\" class=\"flexcol\">
-            <p id=\"software-version\">VTTctl Version ${VTTCTL_MAJOR_VER}.${VTTCTL_MINOR_VER} Build ${BUILD_VER}</p>
-      </footer>
-      </body>
-      </html>" >> $BACKUP_INDEX
+      VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
+      
+      awk -v refresh="$BACKUP_REFRESH" -v file_table="$BACKUP_FILE_TABLE" -v version="$VTTCTL_VERSION" '
+      {
+            gsub("{{BACKUP_REFRESH}}", refresh);
+            gsub("{{BACKUP_FILE_TABLE}}", file_table);
+            gsub("{{VTTCTL_VERSION}}", version);
+            print;
+      }
+      ' "$BACKUP_TEMPLATE" > "$BACKUP_INDEX"
 
 }
 
@@ -155,14 +106,15 @@ function prodBackup()  {
                 ash -c " \
                 tar -cvf /backup/$BACKUP_FILE \
                     -C / /source "
+ 
+            #BACKPID=$!
+            #progressCursor "$BACKUPID"
+
             docker run \
                 --rm \
                 -v $BACKUP_HOME:/backup \
                 busybox \
-                ash -c "chown $UID:$GID /backup/$BACKUP_FILE" 
-
-            #BACKPID=$!
-            #progressCursor "$BACKUPID"
+                ash -c "chown $UID:$GID /backup/$BACKUP_FILE"
 
             DATE_FILE=$(stat --format="%y" "$BACKUP_HOME/$BACKUP_FILE" | awk {'print $1'})
 
@@ -196,7 +148,7 @@ function prodBackup()  {
             echo "}" >> "$METADATA_FILE"
 
             printf "\r   - %s backup file created.\n" "$BACKUP_FILE"
-            generateBackupListing $1
+            generateBackupListing
             echo "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
         fi
     fi
@@ -448,7 +400,7 @@ case "$1" in
             MAJOR_VER="${RUNNING_VER%%.*}"
             log_daemon_msg "Backing up Foundry VTT $RUNNING_VER."   
             start_time=$(date +%s)
-            prodBackup $MAJOR_VER
+            prodBackup
             end_time=$(date +%s)
             duration=$((end_time - start_time))
 

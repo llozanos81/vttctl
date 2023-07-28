@@ -17,6 +17,7 @@
 - id
 - iproute2
 - jq
+- md5sum
 - rm
 - timedatectl
 - python3
