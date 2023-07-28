@@ -161,9 +161,9 @@ function prodBackup()  {
 
             echo "}" >> "$METADATA_FILE"
 
-            printf "\r   - %s backup file created.\n" "$BACKUP_FILE"
+            log_daemon_msg "\r   - ${BACKUP_FILE} backup file created.\n"
             generateBackupListing
-            echo "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
+            log_daemon_msg "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
         fi
     fi
 }
