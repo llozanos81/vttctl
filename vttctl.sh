@@ -45,12 +45,12 @@ function appReload() {
 function generateBackupListing() {
       BACKUP_INDEX=$VTT_HOME/backups/FoundryVTT/index.html
 
-      CSS_V11='\
+      CSS_V11='
       <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
       <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
       '
 
-      CSS_V9='\
+      CSS_V9='
       <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
       <link href="css/style.css" rel="stylesheet" type="text/css" media="all">
       '
