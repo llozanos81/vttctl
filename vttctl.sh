@@ -52,10 +52,10 @@ function generateBackupListing() {
 
       CSS_V9='
       <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
-      <link href="css/style.css" rel="stylesheet" type="text/css" media="all">
+      <link href="../css/style.css" rel="stylesheet" type="text/css" media="all">
       '
 
-      case "$1" in
+      case "$MAJOR_VER" in
             9)
             CSS=$CSS_V9
             ;;
@@ -121,7 +121,7 @@ function generateBackupListing() {
       </table>
       <h2>Go back to <a href=\"/setup\">setup</a></h2>
       <footer id=\"watermark\" class=\"flexcol\">
-            <p id=\"software-version\">VTTctl Version ${MAJOR_VER}.${MINOR_VER} Build ${BUILD_VER}</p>
+            <p id=\"software-version\">VTTctl Version ${VTTCTL_MAJOR_VER}.${VTTCTL_MINOR_VER} Build ${BUILD_VER}</p>
       </footer>
       </body>
       </html>" >> $BACKUP_INDEX
