@@ -44,7 +44,21 @@ function appReload() {
 
 function generateBackupListing() {
       BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
-      BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${MAJOR_VER}.hbs"
+
+      case "${MAJOR_VER}" in
+            9)
+                  TEMPLATE_VER=9
+            ;;
+            10)
+                  # 9 and 10 shares template
+                  TEMPLATE_VER=9
+            ;;
+            11)
+                  TEMPLATE_VER=11
+            ;;
+      esac
+
+      BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
 
       BACKUP_FILE_TABLE=""
 
@@ -751,7 +765,7 @@ case "$1" in
       log_begin_msg "Validating requirements ..."
       if [ ! -d "${VTT_HOME}/backups" ]; then
        mkdir -p ${VTT_HOME}/backups/FoundryVTT
-       if [ -f "${VTT_HOME}/backups/FoundryVTT/index.html" ]; then
+       if [ ! -f "${VTT_HOME}/backups/FoundryVTT/index.html" ]; then
             echo "No available backups yet." > ${VTT_HOME}/backups/FoundryVTT/index.html
        fi
        mkdir -p ${VTT_HOME}/backups/volumes
