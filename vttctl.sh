@@ -54,6 +54,7 @@ function generateBackupListing() {
       <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
       <link href="css/style.css" rel="stylesheet" type="text/css" media="all">
       '
+
       case "$1" in
             9)
             CSS=$CSS_V9
@@ -195,7 +196,7 @@ function prodBackup()  {
             echo "}" >> "$METADATA_FILE"
 
             printf "\r   - %s backup file created.\n" "$BACKUP_FILE"
-            generateBackupListing
+            generateBackupListing $1
             echo "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
         fi
     fi
