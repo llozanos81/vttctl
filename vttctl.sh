@@ -44,18 +44,29 @@ function appReload() {
 
 function generateBackupListing() {
       BACKUP_INDEX=$VTT_HOME/backups/FoundryVTT/index.html
+
+      CSS_V11='\
+      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
+      <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
+      '
+
+      CSS_V9='\
+      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
+      <link href="css/style.css" rel="stylesheet" type="text/css" media="all">
+      '
+
       echo '<!DOCTYPE html>
       <html lang="en">
       <head>
       <title>Foundry VTT Backups</title>
       <meta name="robots" content="noindex, nofollow">
-      <link rel="icon" href="../icons/vtt.png">
-      <link href="../fonts/fontawesome/css/all.min.css" rel="stylesheet" type="text/css" media="all">
-      <link href="../css/foundry2.css" rel="stylesheet" type="text/css" media="all">
+      <link rel="icon" href="../icons/vtt.png">' > $BACKUP_INDEX
+      echo $CSS >> $BACKUP_INDEX
+      echo '
       <script>
         function refreshPage() {
             setTimeout(function() {
-                window.location.reload();'  > $BACKUP_INDEX
+                window.location.reload();'  >> $BACKUP_INDEX
       echo "            }, ${BACKUP_REFRESH}); // Refresh the page every 5 seconds (adjust the time as needed)"  >> $BACKUP_INDEX
       echo '  }
 
@@ -399,7 +410,7 @@ fi
 
 IN_DOCKER=$(id -nG "$USER" | grep -qw "docker" )
 
-if [[ "root" != ${USER} ]] && [[ $IN_DOCKER ]]; then
+if [[ "root" != ${USER} ]] && [[ ${IN_DOCKER} ]]; then
     log_failure_msg "Usage: sudo $0 \n - alternative: add $USER to docker group."
     exit 1
 fi 
@@ -778,6 +789,9 @@ case "$1" in
       log_begin_msg "Validating requirements ..."
       if [ ! -d "${VTT_HOME}/backups" ]; then
        mkdir -p ${VTT_HOME}/backups/FoundryVTT
+       if [ -f "${VTT_HOME}/backups/FoundryVTT/index.html" ]; then
+            echo "No available backups yet." > ${VTT_HOME}/backups/FoundryVTT/index.html
+       fi
        mkdir -p ${VTT_HOME}/backups/volumes
        mkdir -p ${VTT_HOME}/downloads/
        echo "[]" > ${VTT_HOME}/backups/FoundryVTT/metadata.json
