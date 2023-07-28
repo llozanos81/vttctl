@@ -3,7 +3,7 @@ ARG BUILD_VER
 WORKDIR /home/foundry/vtt
 COPY ./${BUILD_VER}/ .
 RUN set -xe \
-    && apk add --no-cache --update npm nodejs python3 \
+    && apk add --no-cache --update npm nodejs python3 make \
     && cd resources/app/ \
     && npm install classic-level --build-from-source
 
