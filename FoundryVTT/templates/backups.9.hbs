@@ -18,31 +18,36 @@
 </head>
 <body class="vtt setup" style>
     <section id="setup">
-        <table>
-            <thead>
-                <tr>
-                    <th>
-                        <h1>Foundry VTT Backups</h1>
-                    </th>
-                </tr>    
-            </thead>
-        </table>
-    <table>
-        <thead>
-        <tr>
-        <th>BackupFile</th>
-        <th>Version</th>
-        <th>Date</th>
-        <th>Size</th>
-        <th>md5sum</th>
-        </tr>
-        </thead>
-        <tbody>
-        {{BACKUP_FILE_TABLE}}
-        </tbody>
-    </table><br>
-    <h2>Go back to <a href="/setup">setup</a></h2>
+<form id="setup-configuration" class="flexcol dark" autocomplete="off">
+
+    <header>
+        <h1>Foundry VTT Backups</h1>
+    </header>
+
+    <!-- Main Content Section -->
+    <section id="config-tabs" class="content flexcol">
+
+        <!-- Worlds Tab -->
+        <div class="tab active" data-tab="worlds" data-group="components">
+            <table>
+                <thead>
+                    <tr>
+                        <th>BackupFile</th>
+                        <th>Version</th>
+                        <th>Date</th>
+                        <th>Size</th>
+                        <th>md5sum</th>
+                        </tr>
+                </thead>
+                <tbody>
+                   {{BACKUP_FILE_TABLE}}
+                </tbody>
+            </table>
+        </div>
     </section>
+</form>
+</section>
+    <h2>Go back to <a href="/setup">setup</a></h2>
     <footer id="watermark">
         <ps>VTTctl Version {{VTTCTL_MAJ}}.{{VTTCTL_MIN}} Build {{VTTCTL_BUILD}}</p>
     </footer>
