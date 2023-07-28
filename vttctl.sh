@@ -67,7 +67,7 @@ function generateBackupListing() {
       done <<< "$files"
 
       VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
-      
+
       awk -v refresh="$BACKUP_REFRESH" -v file_table="$BACKUP_FILE_TABLE" -v version="$VTTCTL_VERSION" '
       {
             gsub("{{BACKUP_REFRESH}}", refresh);
@@ -427,7 +427,7 @@ case "$1" in
         ;;
   build)
       log_daemon_msg "Building $DESC" "$NAME"
-      VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
+      VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
       if [[ -z $VERSIONS ]]; then
             log_daemon_msg " No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
             log_end_msg $?
