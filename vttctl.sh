@@ -449,7 +449,7 @@ case "$1" in
       IS_RUNNING=$($0 status --json=true | jq -r '.running')
         if [[ "$IS_RUNNING" == "true" ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
-        else
+        elif [[ ! $DEFAULT_VER == "" ]]; then
             RUNNING_VER=$DEFAULT_VER
         fi
 
