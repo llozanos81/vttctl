@@ -389,7 +389,8 @@ fi
 
 
 if [ "$USER" != "root" ] && ! id -nG "$USER" | grep -qw "docker"; then
-    log_failure_msg "Usage: sudo $0 \n - alternative: add $USER to docker group."
+    log_failure_msg "Usage: sudo $0 "
+    log_failure_msg " alternative: add $USER to docker group."
     exit 1
 fi 
 
