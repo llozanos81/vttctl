@@ -447,14 +447,13 @@ case "$1" in
   build)
       log_daemon_msg "Building $DESC" "$NAME"
       IS_RUNNING=$($0 status --json=true | jq -r '.running')
+      echo $IS_RUNNING
         if [[ "$IS_RUNNING" == "true" ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
         elif [[ ! $DEFAULT_VER == "" ]]; then
-            RUNNING_VER=$DEFAULT_VER
-        else
-            2="--force"
+            RUNNING_VER=$DEFAULT_VER           
         fi
-
+      echo "Run ver $RUNNING_VER"
 
       if [[ ! -z $2 && $2 == "--force" ]];then
             VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
