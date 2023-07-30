@@ -293,7 +293,7 @@ function getWebStatus() {
       docker exec -it $WEB_CONTAINER ash -c "curl http://localhost/basic_status"       
 }
 
-if [ ! -f ${ENV_FILE} ] && [ $1 != "validate" ]; then
+if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
       $0 validate
 elif [ -f ${ENV_FILE} ]; then
       export $(cat ${ENV_FILE} | xargs)
@@ -372,6 +372,10 @@ elif ! [ -x "/etc/init.d/functions" ]; then
 
       function log_daemon_msg() {
             echo " * "$1 $2 $3      
+      }
+
+      function log_begin_msg() {
+            echo " * "$1 $2 $3
       }
 
       function log_end_msg() {
