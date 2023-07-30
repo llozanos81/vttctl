@@ -451,6 +451,8 @@ case "$1" in
             RUNNING_VER=$($0 status --json=true | jq -r .version)
         elif [[ ! $DEFAULT_VER == "" ]]; then
             RUNNING_VER=$DEFAULT_VER
+        else
+            2="--force"
         fi
 
 
