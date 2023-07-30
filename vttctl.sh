@@ -388,9 +388,7 @@ else
 fi
 
 
-IN_DOCKER=$(id -nG "$USER" | grep -qw "docker" )
-
-if [[ "root" != ${USER} && ${IN_DOCKER} ]]; then
+if [ "$USER" != "root" ] && ! id -nG "$USER" | grep -qw "docker"; then
     log_failure_msg "Usage: sudo $0 \n - alternative: add $USER to docker group."
     exit 1
 fi 
