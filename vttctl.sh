@@ -816,10 +816,12 @@ case "$1" in
 
       for cmd in "${commands[@]}"; do
        if ! type "$cmd" >/dev/null 2>&1; then
-        log_daemon_msg " - Command not found: $cmd"
-        false
-        log_end_msg $?  
-        exit
+            if ! command -v "$cmd" >/dev/null 2>&1; then
+                  log_daemon_msg " - Command not found: $cmd"
+                  false
+                  log_end_msg $?  
+                  exit
+            fi
        fi
       done
       
