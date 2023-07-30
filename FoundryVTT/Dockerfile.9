@@ -1,6 +1,6 @@
 FROM alpine:3.14
+ARG BUILD_VER
 ARG TIMEZONE
-ARG VARS
 WORKDIR /home/foundry/vtt
 COPY ./${BUILD_VER}/ .
 RUN set -xe \

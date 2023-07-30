@@ -390,7 +390,7 @@ fi
 
 if [ "$USER" != "root" ] && ! id -nG "$USER" | grep -qw "docker"; then
     log_failure_msg "Usage: sudo $0 "
-    log_failure_msg " alternative: add $USER to docker group."
+    log_failure_msg " - alternative: add $USER to docker group."
     exit 1
 fi 
 
@@ -511,7 +511,6 @@ case "$1" in
 
                               rm FoundryVTT/.dockerignore >/dev/null 2>&1
                               echo "${exclude[@]}" > FoundryVTT/.dockerignore
-
                               MAJOR_VER="${BUILD_VER%%.*}"
                               TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
@@ -519,7 +518,7 @@ case "$1" in
                               cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
                               cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
                               docker build --progress=plain \
-                                    --build-arg BUILD_VER=$BUILD_VER \
+                                    --build-arg BUILD_VER=${BUILD_VER} \
                                     --build-arg TIMEZONE=$TIMEZONE \
                                     -t foundryvtt:$BUILD_VER \
                                     -f ./FoundryVTT/Dockerfile ./FoundryVTT
