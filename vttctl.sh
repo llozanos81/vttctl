@@ -39,6 +39,7 @@ function getVersion() {
 function appReload() {
     CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
     docker exec -d $CONT_NAME pm2 restart foundry
+    sleep 2
     log_daemon_msg "FoundryVTT nodejs application reloaded."
 }
 
@@ -441,7 +442,20 @@ case "$1" in
         ;;
   build)
       log_daemon_msg "Building $DESC" "$NAME"
-      VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
+      IS_RUNNING=$($0 status --json=true | jq -r '.running')
+        if [[ "$IS_RUNNING" == "true" ]]; then
+            RUNNING_VER=$($0 status --json=true | jq -r .version)
+        else
+            RUNNING_VER=$DEFAULT_VER
+        fi
+
+
+      if [[ ! -z $2 && $2 == "--force" ]];then
+            VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
+      else
+            VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep -E "^[0-9]{2}\.[0-9]{3,4}$" | grep -v "${RUNNING_VER}")
+      fi
+
       if [[ -z $VERSIONS ]]; then
             log_daemon_msg " No FoundryVTT binares found, Use $0 download \"TIMED_URL\""
             log_end_msg $?

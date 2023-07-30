@@ -1,17 +1,8 @@
-FROM alpine:3.14 AS build
-ARG BUILD_VER
-WORKDIR /home/foundry/vtt
-COPY ./${BUILD_VER}/ .
-RUN set -xe \
-    && apk add --no-cache --update npm nodejs python3 make g++ \
-    && cd resources/app/ \
-    && npm install classic-level --build-from-source
-
 FROM alpine:3.14
 ARG TIMEZONE
 ARG VARS
 WORKDIR /home/foundry/vtt
-COPY --from=build /home/foundry/vtt ./
+COPY ./${BUILD_VER}/ .
 RUN set -xe \
     && export \
     && apk add --no-cache --update shadow nodejs npm tzdata \
