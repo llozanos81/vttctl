@@ -346,24 +346,21 @@ LOCAL_IP=$(getIPaddr)
 ETHERNET=$(ip add | grep -v altname | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
-# Ubuntu validation
-if [ -f /etc/debian_version ]; then
-      if ! type "lsb_release" >/dev/null 2>&1; then
+if [ -f /etc/debian_version ]; then # Ubuntu validation
+      if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -sir | head -1)
             DISTRO_VERSION=$(lsb_release -sir | tail -1)
       else
             LINUX_DISTRO="N/A lsb_release missing"
       fi
-# CentOS validation
-elif [ -f /etc/redhat-release ]; then
-      if ! type "lsb_release" >/dev/null 2>&1; then
+elif [ -f /etc/redhat-release ]; then # CentOS validation
+      if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -sr)
       else
             LINUX_DISTRO="N/A lsb_release missing"
       fi
-# Default LSB
-elif ! type "lsb_release" >/dev/null 2>&1; then
+elif ! type "lsb_release" >/dev/null 2>&1; then # Default LSB
       LINUX_DISTRO="N/A lsb_release missing"
 else
       LINUX_DISTRO=$(lsb_release -sir | head -1)
