@@ -261,6 +261,7 @@ function isPlatformSupported() {
       supported=(
             "Ubuntu 22.04 aarch64"
             "Ubuntu 22.04 x86_64"
+            "CentOS 7.9.2009 x86_64"
       )
 
       notsupported=(
