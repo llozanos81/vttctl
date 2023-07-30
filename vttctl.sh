@@ -284,7 +284,7 @@ function isPlatformSupported() {
       done
 
       if [[ ! $matchFoundSupported && ! $matchFoundNotSupported ]]; then
-            echo "${light_yellow}not tested${reset}"
+            echo -e "${light_yellow}not tested${reset}"
       fi
 }
 
@@ -346,13 +346,31 @@ LOCAL_IP=$(getIPaddr)
 ETHERNET=$(ip add | grep -v altname | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
-if ! type "lsb_release" >/dev/null 2>&1; then
+# Ubuntu validation
+if [ -f /etc/debian_version ]; then
+      if ! type "lsb_release" >/dev/null 2>&1; then
+            LINUX_DISTRO=$(lsb_release -sir | head -1)
+            DISTRO_VERSION=$(lsb_release -sir | tail -1)
+      else
+            LINUX_DISTRO="N/A lsb_release missing"
+      fi
+# CentOS validation
+elif [ -f /etc/redhat-release ]; then
+      if ! type "lsb_release" >/dev/null 2>&1; then
+            LINUX_DISTRO=$(lsb_release -si)
+            DISTRO_VERSION=$(lsb_release -sr)
+      else
+            LINUX_DISTRO="N/A lsb_release missing"
+      fi
+# Default LSB
+elif ! type "lsb_release" >/dev/null 2>&1; then
       LINUX_DISTRO="N/A lsb_release missing"
 else
       LINUX_DISTRO=$(lsb_release -sir | head -1)
       DISTRO_VERSION=$(lsb_release -sir | tail -1)
 fi
 
+# CPU Architecture
 if ! type "uname" >/dev/null 2>&1; then
       CPU_ARCH="N/A uname missing."
 else
@@ -375,6 +393,10 @@ elif ! [ -x "/etc/init.d/functions" ]; then
       }
 
       function log_begin_msg() {
+            echo " * "$1 $2 $3
+      }
+
+      function log_warning_msg() {
             echo " * "$1 $2 $3
       }
 
