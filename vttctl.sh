@@ -12,11 +12,11 @@ function stop() {
 }
 
 function getLogs() {
-    VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs
+    VARS="" docker-compose -p $PROD_PROJECT -f ${VTT_HOME}/docker/docker-compose.yml logs
 }
 
 function liveLogs() {
-    VARS="" docker-compose -p $PROD_PROJECT -f $VTT_HOME/docker/docker-compose.yml logs -f
+    VARS="" docker-compose -p $PROD_PROJECT -f ${VTT_HOME}/docker/docker-compose.yml logs -f
 }
 
 function getVersion() {
@@ -64,7 +64,7 @@ function generateBackupListing() {
       BACKUP_FILE_TABLE=""
 
       # Extract version, date, and size information for tar and tar.gz files
-      files=$(ls -hal "$VTT_HOME/backups/FoundryVTT/" | awk '/^.*\.tar(\.gz|\.bz2)?$/ {print}')
+      files=$(ls -hal "${VTT_HOME}/backups/FoundryVTT/" | awk '/^.*\.tar(\.gz|\.bz2)?$/ {print}')
       while IFS= read -r line; do
             file=$(echo "$line" | awk '{print $9}')
             version=$(echo "$file" | awk -F"[_.-]" '{match($0, /[0-9]+\.[0-9]{3}/, v); print v[0]}')
@@ -207,7 +207,7 @@ function fixConfig() {
             "sed -i 's/\"upnp\": true/\"upnp\": false/' /home/foundry/userdata/Config/options.json"
 }
 
-function getIPaddr() {
+function getIPaddrByGW() {
     gateway_ip=$(ip route | awk '/default/ {if ($3 ~ /\./) print $3}' | sort -u)
     interface=$(ip route get $gateway_ip | awk '/dev/ {print $3}')
     ip_address=$(ip -o -4 addr show dev $interface | awk '{print $4}' | awk -F '/' '{print $1}')
@@ -343,7 +343,7 @@ BACKUP_HOME="${VTT_HOME}/backups/FoundryVTT/"
 GID=$(getent passwd $USER | awk -F: '{print $4}')
 CPU_COUNT=$(cat /proc/cpuinfo | grep processor | wc -l)
 TOTAL_RAM=$(free -mh | grep Mem | awk '{gsub(/i/, "B", $2); print $2}')
-LOCAL_IP=$(getIPaddr)
+LOCAL_IP=$(getIPaddrByGW)
 ETHERNET=$(ip add | grep -v altname | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
@@ -382,6 +382,7 @@ if ! [ -x "/lib/lsb/init-functions" ]; then
 elif ! [ -x "/etc/init.d/functions" ]; then
         . /etc/init.d/functions
 
+      # Helper logging functions not included in /etc/init.d/functions
       function log_failure_msg() {
             echo -e " * "$1 $2 $3           
       }
@@ -445,7 +446,11 @@ case "$1" in
             minutes=$((duration / 60))
             seconds=$((duration % 60))
 
-            log_daemon_msg " Elapsed Time: ${minutes}:${seconds}."
+            # Format minutes and seconds with leading zeros if below 10
+            minutes_formatted=$(printf "%02d" "$minutes")
+            seconds_formatted=$(printf "%02d" "$seconds")
+
+            log_daemon_msg "Elapsed Time: ${minutes_formatted}:${seconds_formatted}."
             log_daemon_msg " Done."
             log_end_msg $?
             exit
@@ -473,9 +478,9 @@ case "$1" in
       fi
 
       if [[ (! -z $2 && $2 == "--force") || ($RUNNING_VER == "") ]];then
-            VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
+            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
       else
-            VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep -E "^[0-9]{2}\.[0-9]{3,4}$" | grep -v "${RUNNING_VER}")
+            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep -E "^[0-9]\{1,2\}\.[0-9]\{3,4\}$" | grep -v "${RUNNING_VER}")
       fi
 
       if [[ -z $VERSIONS ]]; then
@@ -529,19 +534,19 @@ case "$1" in
                                     fi
                               done
 
-                              rm FoundryVTT/.dockerignore >/dev/null 2>&1
-                              echo "${exclude[@]}" > FoundryVTT/.dockerignore
+                              rm ${VTT_HOME}/FoundryVTT/.dockerignore >/dev/null 2>&1
+                              echo "${exclude[@]}" > ${VTT_HOME}/FoundryVTT/.dockerignore
                               MAJOR_VER="${BUILD_VER%%.*}"
                               TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
                               echo "Building version: $BUILD_VER"
-                              cp FoundryVTT/Dockerfile.$MAJOR_VER FoundryVTT/Dockerfile
-                              cp FoundryVTT/docker-entrypoint.sh FoundryVTT/$BUILD_VER/
+                              cp ${VTT_HOME}/FoundryVTT/Dockerfile.$MAJOR_VER ${VTT_HOME}/FoundryVTT/Dockerfile
+                              cp ${VTT_HOME}/FoundryVTT/docker-entrypoint.sh ${VTT_HOME}/FoundryVTT/$BUILD_VER/
                               docker build --progress=plain \
                                     --build-arg BUILD_VER=${BUILD_VER} \
                                     --build-arg TIMEZONE=$TIMEZONE \
                                     -t foundryvtt:$BUILD_VER \
-                                    -f ./FoundryVTT/Dockerfile ./FoundryVTT
+                                    -f ${VTT_HOME}/FoundryVTT/Dockerfile ${VTT_HOME}/FoundryVTT
                               break
                               ;;
                         0)
@@ -556,18 +561,19 @@ case "$1" in
       fi
       
       log_end_msg $?
+      exit 1
       ;;
   clean)  
         $0 stop
         echo "Deleting FoundryVTT containers ..."
-        VARS="" TAG=$TAG docker-compose -p $PROD_PROJECT -f docker/docker-compose.yml down
-        VARS="" TAG=$TAG docker-compose -p $DEV_PROJECT -f docker/docker-compose-dev.yml down
+        VARS="" TAG=$TAG docker-compose -p $PROD_PROJECT -f ${VTT_HOME}/docker/docker-compose.yml down
+        VARS="" TAG=$TAG docker-compose -p $DEV_PROJECT -f ${VTT_HOME}/docker/docker-compose-dev.yml down
         exit 1
         ;;
   cleanup)
-      DIR_VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]*")
+      DIR_VERSIONS=$(ls -ld ${VTT_HOME}/FoundryVTT/*[0-9]* | awk '/^d/ {print $NF}')
       IMG_VERSIONS=$(docker images -a | grep vtt | awk {'print $1":"$2'})
-      BIN_VERSIONS=$(ls downloads/ | grep -E '[0-9]{2,3}\.[0-9]{2,3}')
+      BIN_VERSIONS=$(ls ${VTT_HOME}/downloads/ | grep -E '[0-9]{2,3}\.[0-9]{2,3}')
 
       declare -A word_counts
 
@@ -614,9 +620,9 @@ case "$1" in
                         read -p "Are you sure you want to remove all v$DEL_VER related assets? (y/n): " confirmation
                         if [ "$confirmation" == "y" ] || [ "$confirmation" == "Y" ]; then
                               echo "Deleting zip file ..."
-                              rm -f downloads/*$DEL_VER* >/dev/null 2>&1
+                              rm -f ${VTT_HOME}/downloads/*$DEL_VER* >/dev/null 2>&1
                               echo "Deleting extracted folder ..."
-                              rm -rf FoundryVTT/$DEL_VER/ >/dev/null 2>&1
+                              rm -rf ${VTT_HOME}/FoundryVTT/$DEL_VER/ >/dev/null 2>&1
                               echo "Deleting Docker image ..."
                               docker image rm foundryvtt:$DEL_VER >/dev/null 2>&1
                               echo "Cleaning completed."
@@ -667,7 +673,7 @@ case "$1" in
             case $OPT in
                   [1-9])
                         NEW_DEFAULT_VER=$(echo "$VERSIONS" | sed -n "${OPT}p")
-                        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" ".env"
+                        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=$NEW_DEFAULT_VER/" "${VTT_HOME}/.env"
                         echo "New default version is $NEW_DEFAULT_VER."
                         break
                         ;;
@@ -682,7 +688,7 @@ case "$1" in
                         ;;
             esac
         done
-        exit      
+        exit 1     
         ;;
   download)
         if [[ $2 =~ $REGEX_URL ]]; then 
@@ -794,7 +800,7 @@ case "$1" in
   monitor)
             CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
             docker exec -it $CONT_NAME pm2 monit
-            exit
+            exit 1
         ;;
   validate)
       log_begin_msg "Validating requirements ..."
