@@ -349,8 +349,8 @@ PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
 if [ -f /etc/debian_version ]; then # Ubuntu validation
       if type "lsb_release" >/dev/null 2>&1; then
-            LINUX_DISTRO=$(lsb_release -sir | head -1)
-            DISTRO_VERSION=$(lsb_release -sir | tail -1)
+            LINUX_DISTRO=$(lsb_release -is)
+            DISTRO_VERSION=$(lsb_release -rs)
       else
             LINUX_DISTRO="N/A lsb_release missing"
       fi
@@ -383,23 +383,23 @@ elif ! [ -x "/etc/init.d/functions" ]; then
         . /etc/init.d/functions
 
       function log_failure_msg() {
-            echo " * "$1 $2 $3           
+            echo -e " * "$1 $2 $3           
       }
 
       function log_daemon_msg() {
-            echo " * "$1 $2 $3      
+            echo -e " * "$1 $2 $3      
       }
 
       function log_begin_msg() {
-            echo " * "$1 $2 $3
+            echo -e " * "$1 $2 $3
       }
 
       function log_warning_msg() {
-            echo " * "$1 $2 $3
+            echo -e " * "$1 $2 $3
       }
 
       function log_end_msg() {
-            echo " * "$1 $2 $3
+            echo -e " * "$1 $2 $3
       }
 
 else
@@ -466,11 +466,11 @@ case "$1" in
   build)
       log_daemon_msg "Building $DESC" "$NAME"
       IS_RUNNING=$($0 status --json=true | jq -r '.running')
-        if [[ "$IS_RUNNING" == "true" ]]; then
+      if [[ "$IS_RUNNING" == "true" ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
-        elif [[ ! $DEFAULT_VER == "" ]]; then
+      elif [[ ! $DEFAULT_VER == "" ]]; then
             RUNNING_VER=$DEFAULT_VER           
-        fi
+      fi
 
       if [[ (! -z $2 && $2 == "--force") || ($RUNNING_VER == "") ]];then
             VERSIONS=$(ls -l FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
@@ -707,7 +707,7 @@ case "$1" in
                   # Check the exit code of the previous command
                   if [ $? -eq 0 ]; then
                         # The file is a ZIP file, proceed with downloading
-                        log_daemon_msg " The file is a ZIP file. Starting download..."
+                        log_daemon_msg " Downloading ZIP file $FILE ..."
                         curl -# -o "${VTT_HOME}/downloads/$FILE" "$2"
                         log_daemon_msg " Download completed."
 
