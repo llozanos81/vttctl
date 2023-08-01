@@ -478,9 +478,9 @@ case "$1" in
       fi
 
       if [[ (! -z $2 && $2 == "--force") || ($RUNNING_VER == "") ]];then
-            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep "^[0-9]\{1,2\}\.[0-9]\{3,4\}$")
+            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '$NF ~ /^[0-9]{1,2}\.[0-9]{3,4}$/ {print $NF}')
       else
-            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '{print $NF}' | grep -E "^[0-9]\{1,2\}\.[0-9]\{3,4\}$" | grep -v "${RUNNING_VER}")
+            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '$NF ~ /^[0-9]{1,2}\.[0-9]{3,4}$/ {print $NF}' | grep -v "${RUNNING_VER}")
       fi
 
       if [[ -z $VERSIONS ]]; then
