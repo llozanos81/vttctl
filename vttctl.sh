@@ -361,7 +361,7 @@ if [ -f /etc/debian_version ]; then # Ubuntu/Debian validation
             if [[ $version == *"sid"* ]]; then
                   LINUX_DISTRO=$(lsb_release -si)
                   DISTRO_VERSION=$(lsb_release -rs)
-            elif
+            else
                   LINUX_DISTRO=$(lsb_release -si 2>/dev/null)
                   DISTRO_VERSION=$(lsb_release -rs 2>/dev/null)
             fi
