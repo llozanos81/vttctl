@@ -297,6 +297,11 @@ function getWebStatus() {
 if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
       $0 validate
 elif [ -f ${ENV_FILE} ]; then
+      if [ "$USER" != "root" ] && ! id -nG "$USER" | grep -qw "docker"; then
+            log_failure_msg "Usage: sudo $0 "
+            log_failure_msg " - alternative: add $USER to docker group."
+            exit 1
+      fi 
       export $(cat ${ENV_FILE} | xargs)
 fi
 
@@ -361,6 +366,13 @@ elif [ -f /etc/redhat-release ]; then # CentOS validation
       else
             LINUX_DISTRO="N/A lsb_release missing"
       fi
+elif [ -f /etc/rocky-release ]; then # RockyLinux validation
+      if type "lsb_release" >/dev/null 2>&1; then
+            LINUX_DISTRO=$(lsb_release -si)
+            DISTRO_VERSION=$(lsb_release -sr)
+      else
+            LINUX_DISTRO="N/A lsb_release missing"
+      fi
 elif ! type "lsb_release" >/dev/null 2>&1; then # Default LSB
       LINUX_DISTRO="N/A lsb_release missing"
 else
@@ -407,13 +419,6 @@ else
         echo "E: /lib/lsb/init-functions or /etc/init.d/functions not found, lsb-base needed"
         exit 1
 fi
-
-
-if [ "$USER" != "root" ] && ! id -nG "$USER" | grep -qw "docker"; then
-    log_failure_msg "Usage: sudo $0 "
-    log_failure_msg " - alternative: add $USER to docker group."
-    exit 1
-fi 
 
 case "$1" in
   attach)
