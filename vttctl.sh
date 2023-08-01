@@ -353,30 +353,30 @@ LOCAL_IP=$(getIPaddrByGW)
 ETHERNET=$(ip add | grep -v altname | grep -B2 $LOCAL_IP | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
 PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
-if [ -f /etc/debian_version ]; then # Ubuntu validation
+LINUX_DISTRO="N/A lsb_release missing"
+
+if [ -f /etc/debian_version ]; then # Ubuntu/Debian validation
+      version=$(< /etc/debian_version)
       if type "lsb_release" >/dev/null 2>&1; then
-            LINUX_DISTRO=$(lsb_release -si)
-            DISTRO_VERSION=$(lsb_release -rs)
-      else
-            LINUX_DISTRO="N/A lsb_release missing"
+            if [[ $version == *"sid"* ]]; then
+                  LINUX_DISTRO=$(lsb_release -si)
+                  DISTRO_VERSION=$(lsb_release -rs)
+            elif
+                  LINUX_DISTRO=$(lsb_release -si 2>/dev/null)
+                  DISTRO_VERSION=$(lsb_release -rs 2>/dev/null)
+            fi
       fi
-elif [ -f /etc/redhat-release ]; then # CentOS validation
+elif [ (-f /etc/redhat-release) || (-f /etc/rocky-release) ]; then # CentOS/RockyLinux validation
       if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -sr)
-      else
-            LINUX_DISTRO="N/A lsb_release missing"
       fi
 elif [ -f /etc/rocky-release ]; then # RockyLinux validation
       if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -sr)
-      else
-            LINUX_DISTRO="N/A lsb_release missing"
       fi
-elif ! type "lsb_release" >/dev/null 2>&1; then # Default LSB
-      LINUX_DISTRO="N/A lsb_release missing"
-else
+else # Default LSB
       LINUX_DISTRO=$(lsb_release -sir | head -1)
       DISTRO_VERSION=$(lsb_release -sir | tail -1)
 fi
