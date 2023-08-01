@@ -366,7 +366,7 @@ if [ -f /etc/debian_version ]; then # Ubuntu/Debian validation
                   DISTRO_VERSION=$(lsb_release -rs 2>/dev/null)
             fi
       fi
-elif [ ( -f /etc/redhat-release ) || ( -f /etc/rocky-release ) ]; then # CentOS/RockyLinux validation
+elif [ -f /etc/redhat-release ] || [ -f /etc/rocky-release ]; then # CentOS/RockyLinux validation
       if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -sr)
