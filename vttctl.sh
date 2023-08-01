@@ -262,6 +262,7 @@ function isPlatformSupported() {
             "Ubuntu 22.04 aarch64"
             "Ubuntu 22.04 x86_64"
             "CentOS 7.9.2009 x86_64"
+            "Rocky 8.8 x86_64"
       )
 
       notsupported=(
@@ -354,7 +355,7 @@ PUBLIC_IP=$(curl -s ifconfig.me/ip)
 
 if [ -f /etc/debian_version ]; then # Ubuntu validation
       if type "lsb_release" >/dev/null 2>&1; then
-            LINUX_DISTRO=$(lsb_release -is)
+            LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -rs)
       else
             LINUX_DISTRO="N/A lsb_release missing"
