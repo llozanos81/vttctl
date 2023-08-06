@@ -413,6 +413,10 @@ elif [ -f /etc/redhat-release ] || [ -f /etc/rocky-release ]; then # CentOS/Rock
       if type "lsb_release" >/dev/null 2>&1; then
             LINUX_DISTRO=$(lsb_release -si)
             DISTRO_VERSION=$(lsb_release -sr)
+      else
+            LINUX_DISTRO=$(cat /etc/rocky-release | awk {'print $1'})
+            DISTRO_VERSION=$(cat /etc/rocky-release | awk {'print $4'})
+
       fi
 else # Default LSB
       LINUX_DISTRO=$(lsb_release -sir | head -1)
