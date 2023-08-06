@@ -9,10 +9,10 @@
 - validate if downloaded file it's actually the FoundryVTT application
 - Add configuration Wizard for env file
 - Add upgrade option at CLI
-- Change logging, drop use of lsb functions
 - Add security to /backups (.htaccess?)
 
 # DONE
+- Change logging, drop use of lsb functions
 - Create Public URL for created backup using ./vttctl.sh backup
 - Validate download URL is the correct for Linux deployment
 - Validate if download Zip major version is vttctl supported

@@ -305,37 +305,32 @@ function getWebStatus() {
 }
 
 
-# Source function library.
-if ! [ -x "/lib/lsb/init-functions" ]; then
-        . /lib/lsb/init-functions
-elif ! [ -x "/etc/init.d/functions" ]; then
-        . /etc/init.d/functions
-
-      # Helper logging functions not included in /etc/init.d/functions
-      function log_failure_msg() {
-            echo -e " * "$1 $2 $3           
+# Helper logging functions
+      function log_begin_msg() {
+            echo -e " ${light_green}*${reset} "$1 $2 $3
       }
 
       function log_daemon_msg() {
-            echo -e " * "$1 $2 $3      
-      }
-
-      function log_begin_msg() {
-            echo -e " * "$1 $2 $3
+            echo -e " ${light_white}*${reset} "$1 $2 $3      
       }
 
       function log_warning_msg() {
-            echo -e " * "$1 $2 $3
+            echo -e " ${light_yellow}*${reset} "$1 $2 $3
+      }
+
+
+      function log_failure_msg() {
+            echo -e " ${light_red}*${reset} "$1 $2 $3           
       }
 
       function log_end_msg() {
-            echo -e " * "$1 $2 $3
+            if [ $? -lt 1 ]; then
+                  echo -e " [${light_green}OK${reset}] "
+            else
+                  echo -e " [${light_red}fail${reset}] "
+            fi
       }
 
-else
-        echo "E: /lib/lsb/init-functions or /etc/init.d/functions not found, lsb-base needed"
-        exit 1
-fi
 
 # Validate if environment is setted up
 if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
@@ -404,9 +399,9 @@ LINUX_DISTRO="N/A lsb_release missing"
 
 # Distro detection
 if [ -f /etc/debian_version ]; then # Ubuntu/Debian validation
-      version=$(< /etc/debian_version)
+      deb_version=$(< /etc/debian_version)
       if type "lsb_release" >/dev/null 2>&1; then
-            if [[ $version == *"sid"* ]]; then
+            if [[ $deb_version == *"sid"* ]]; then
                   LINUX_DISTRO=$(lsb_release -si)
                   DISTRO_VERSION=$(lsb_release -rs)
             else
