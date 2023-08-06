@@ -747,7 +747,8 @@ case "$1" in
                   --rm \
                   -v foundryvtt_prod_UserData:/source/ \
                   busybox \
-                  ash -c "cat /source/Logs/diagnostics.json"
+                  ash -c "if [ -f /source/Logs/diagnostics.json ]; then cat /source/Logs/diagnostics.json; fi"
+
       ;;
   download)
         if [[ $2 =~ ${REGEX_URL} ]]; then 
