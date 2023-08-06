@@ -270,6 +270,7 @@ function isPlatformSupported() {
             "Ubuntu 22.04 x86_64"
             "CentOS 7.9.2009 x86_64"
             "Rocky 8.8 x86_64"
+            "Rocky 9.2 x86_64"
       )
 
       notsupported=(
@@ -304,7 +305,6 @@ function getWebStatus() {
       docker exec -it ${WEB_CONTAINER} ash -c "curl http://localhost/basic_status"       
 }
 
-
 # Helper logging functions
       function log_begin_msg() {
             echo -e " ${light_green}*${reset} "$1 $2 $3
@@ -318,7 +318,6 @@ function getWebStatus() {
             echo -e " ${light_yellow}*${reset} "$1 $2 $3
       }
 
-
       function log_failure_msg() {
             echo -e " ${light_red}*${reset} "$1 $2 $3           
       }
@@ -330,7 +329,6 @@ function getWebStatus() {
                   echo -e " [${light_red}fail${reset}] "
             fi
       }
-
 
 # Validate if environment is setted up
 if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
