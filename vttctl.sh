@@ -67,7 +67,7 @@ function generateBackupListing() {
       while IFS= read -r line; do
             file=$(echo "${line}" | awk '{print $9}')
             version=$(echo "${file}" | grep -oP '\d+\.\d{3}')
-            raw_date=$(echo "${file}" | awk -F"[_.-]" '{match($0, /[0-9]{4}[0-9]{2}[0-9]{2}/, d); print d[0]}')
+            raw_date=$(echo "${file}" | grep -oP '(?<=-)(2\d{7})(?=\.)')
             date=$(date -d "${raw_date}" +'%Y-%m-%d')
             size=$(echo "${line}" | awk '{print $5}')
             md5=$(md5sum ${VTT_HOME}/backups/FoundryVTT/${file} | awk {'print $1'} )
