@@ -9,6 +9,8 @@
 - Add configuration Wizard for env file
 - Add upgrade option at CLI
 - Add security to /backups (.htaccess?)
+- Create a binary instead of a script
+- Integrate with bash autocomplete
 
 # DONE
 - Change logging, drop use of lsb functions

@@ -300,11 +300,11 @@ function isPlatformSupported() {
             "CentOS 7.9.2009 x86_64"
             "Rocky 8.8 x86_64"
             "Rocky 9.2 x86_64"
+            "Debian 12 x86_64"
       )
 
       notsupported=(
             "CentOS 5 x86_64"
-            "Debian 12 x86_64"
             "Debian 11 x86_64"
       )
 
@@ -952,7 +952,7 @@ case "$1" in
         if [[ -n ${DEFAULT_VER} ]]; then
             log_begin_msg "Starting ${DESC}" "${NAME} ${DEFAULT_VER}"
             VARS=$(echo "FQDN=${FQDN}|PROXY_PORT=${PUBLIC_PROD_PORT}" | base64)
-
+            
             TAG=${TAG} VARS=${VARS} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
             if [ "${DEV_ENABLED}" == "true" ]; then
                   docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml up -d -e VARS=${VARS} -e TAG=${TAG}
