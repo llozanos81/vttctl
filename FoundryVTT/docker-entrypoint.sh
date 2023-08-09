@@ -1,5 +1,5 @@
 #!/usr/bin/env ash
-decoded_str=$(echo "$base64_vars" | base64 -d | tr '|' ' ')
+decoded_str=$(echo "$base64_vars" | base64 -d)
 
 for var in $decoded_str; do
     export "$var"

@@ -951,8 +951,8 @@ case "$1" in
   start)
         if [[ -n ${DEFAULT_VER} ]]; then
             log_begin_msg "Starting ${DESC}" "${NAME} ${DEFAULT_VER}"
-            VARS=$(echo "FQDN=${FQDN}|PROXY_PORT=${PUBLIC_PROD_PORT}" | base64)
-            
+            VARS=$(echo "FQDN=${FQDN} PROXY_PORT=${PUBLIC_PROD_PORT}" | base64)
+
             TAG=${TAG} VARS=${VARS} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
             if [ "${DEV_ENABLED}" == "true" ]; then
                   docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml up -d -e VARS=${VARS} -e TAG=${TAG}
