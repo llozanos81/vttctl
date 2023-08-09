@@ -66,7 +66,7 @@ function generateBackupListing() {
       files=$(ls -hal "${VTT_HOME}/backups/FoundryVTT/" | awk '/^.*\.tar(\.gz|\.bz2)?$/ {print}')
       while IFS= read -r line; do
             file=$(echo "${line}" | awk '{print $9}')
-            version=$(echo "${file}" | awk -F"[_.-]" '{match($0, /[0-9]+\.[0-9]{3}/, v); print v[0]}')
+            version=$(echo "${file}" | grep -oP '\d+\.\d{3}')
             raw_date=$(echo "${file}" | awk -F"[_.-]" '{match($0, /[0-9]{4}[0-9]{2}[0-9]{2}/, d); print d[0]}')
             date=$(date -d "${raw_date}" +'%Y-%m-%d')
             size=$(echo "${line}" | awk '{print $5}')
@@ -168,6 +168,35 @@ function prodBackup()  {
             log_daemon_msg "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
         fi
     fi
+}
+
+function getParentDirectoriesToStrip() {
+      tar_output=$(tar -tf $1 | head -n 30)
+
+      # Look for common parent directories among the paths
+      parent_dirs=()
+
+      while IFS= read -r line; do
+      # Use the first path to initialize the parent_dirs array
+      if [[ -z "${parent_dirs[@]}" ]]; then
+            IFS="/" read -ra parts <<< "$line"
+            parent_dirs=("${parts[@]}")
+      else
+            IFS="/" read -ra parts <<< "$line"
+            for i in "${!parts[@]}"; do
+                  if [[ "${parts[i]}" != "${parent_dirs[i]}" ]]; then
+                  # Trim the parent_dirs array to the common parent
+                  parent_dirs=("${parent_dirs[@]:0:i}")
+                  break
+                  fi
+            done
+      fi
+      done <<< "$tar_output"
+
+      # Calculate the value for --strip-components
+      strip_components=${#parent_dirs[@]}
+
+      echo "$strip_components"      
 }
 
 function prodLatestRestore() {
@@ -467,15 +496,15 @@ case "$1" in
             ELAPSED_TIME=""
 
             if [ ! -z ${hours} ]; then
-                  ELAPSED_TIME=${hours}
+                  ELAPSED_TIME="${hours}:"
             fi
             # Format minutes and seconds with leading zeros if below 10
             minutes_formatted=$(printf "%02d" "${minutes}")
             seconds_formatted=$(printf "%02d" "${seconds}")
 
-            ELAPSED_TIME="${ELAPSED_TIME}:${minutes_formatted}:${seconds_formatted}"
+            ELAPSED_TIME="${ELAPSED_TIME}${minutes_formatted}:${seconds_formatted}"
 
-            log_daemon_msg "Elapsed Time: ${ELAPSED_TIME}."
+            log_daemon_msg "Elapsed Time: ${ELAPSED_TIME}"
             log_daemon_msg " Done."
             log_end_msg $?
             exit
@@ -651,18 +680,20 @@ case "$1" in
                         DEL_VER=${list[$OPT]}
                         read -p "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): " confirmation
                         if [ "${confirmation}" == "y" ] || [ "${confirmation}" == "Y" ]; then
-                              echo "Deleting zip file ..."
+                              log_daemon_msg "Deleting zip file ..."
                               rm -f ${VTT_HOME}/downloads/*${DEL_VER}* >/dev/null 2>&1
-                              echo "Deleting extracted folder ..."
+                              log_daemon_msg "Deleting extracted folder ..."
                               rm -rf ${VTT_HOME}/FoundryVTT/${DEL_VER}/ >/dev/null 2>&1
-                              echo "Deleting Docker image ..."
+                              log_daemon_msg "Deleting Docker image ..."
                               docker image rm foundryvtt:${DEL_VER} >/dev/null 2>&1
-                              echo "Cleaning completed."
+                              log_daemon_msg "Cleaning completed."
                         fi
                         break
                         ;;
                   0)
-                        echo "Cleaning cancelled."
+                        log_failure_msg "Cleaning cancelled."
+                        false
+                        log_end_msg
                         break
                         ;;
                   *)
@@ -966,24 +997,90 @@ case "$1" in
         exit 1
         ;;
   restore)
-        
-        file_array=("$BACKUP_HOME"/*.tar)
-        log_daemon_msg "Restoring up Foundry VTT."
-        #prodLatestRestore
-        #$0 reload
-        for ((i=0; i<${#file_array[@]}; i++)); do
-            filename=$(basename ${file_array[i]})
+            # Enable extended globbing
+            shopt -s extglob
 
-            version="${filename#foundry_userdata_}"   # Remove the prefix 'foundry_userdata_'
-            version="${version%%-*}"  
+            # Populate the file_array with .tar, .tar.gz, and .tar.bz2 files
+            file_array=()
 
-            filedate="${filename#*-}"                  # Remove the prefix until the first '-'
-            filedate="${filedate%.tar}"
-            human_readable_date=$(date -d "$filedate" +"%b %d, %Y")
+            # Iterate through matching files and append them to the array
+            for file in "$BACKUP_HOME"*.tar "$BACKUP_HOME"*.tar.gz "$BACKUP_HOME"*.tar.bz2; do
+                  if [ -f "$file" ]; then
+                        file_array+=("$file")
+                  fi
+            done
 
-            echo "$((i+1))) $version - $human_readable_date"
+        log_begin_msg "Restoring up Foundry VTT."
+        log_daemon_msg " Existing backups in ${BACKUP_HOME}"
+        echo " "
+        echo " Choose version/date to restore ('0' to cancel):"
+        # Print a list of existing backups
+        OPT=""
+        while [[ $OPT != "0" ]]; do
+            for ((i=0; i<${#file_array[@]}; i++)); do
+                  filename=$(basename ${file_array[i]})
+
+                  version="${filename#foundry_userdata_}"   # Remove the prefix 'foundry_userdata_'
+                  version="${version%%-*}"  
+
+                  filedate="${filename#*-}"                  # Remove the prefix until the first '-'
+                  filedate="${filedate%%.*}"
+                  human_readable_date=$(date -d "$filedate" +"%b %d, %Y")
+                  echo " $((i+1))) $version - $human_readable_date"
+            done
+            read -p " Version and date to restore?: " OPT
+
+            # Choosing restore options, up to 9 available versions.
+            case ${OPT} in
+                  [1-9])
+                        count=${#file_array[@]}
+                        # Validate if OPT is within a valid range
+                        if [ $OPT -ge 0 ] && [ $OPT -le $count ]; then
+                              # Decrement the value of OPT by 1
+                              i=$((OPT - 1))
+
+                              # Get the value at the specified index (i)
+                              VER_RESTORE="${file_array[i]}"
+
+                              # Print the value
+                              BACKUP_FILE=$(basename "$VER_RESTORE")
+                              log_daemon_msg "Validating ${BACKUP_FILE} ..."
+                              
+                              directories=$(tar -tf ${VER_RESTORE} | head -n 30 | grep -E '(/Logs/|/Config/|/Data/)' | awk -F/ '{print $2}' | sort -u)
+
+                              if echo "$directories" | grep -q "Config" && echo "$directories" | grep -q "Data" && echo "$directories" | grep -q "Logs"; then
+                                    log_daemon_msg " - Found valid FoundryVTT backup directory structure!"
+                                    log_daemon_msg "Validating FoundryVTT backup version ..."
+                                    FILE_DIAG=$(tar -tf ${VER_RESTORE} | grep diagnostics.json)
+                                    BACK_DIAG=$(tar -xOf ${VER_RESTORE} ${FILE_DIAG} | grep -a .)
+                                    BACKUP_GENERATION=$(echo ${BACK_DIAG}| jq -r '.foundry.generation')
+                                    BACKUP_BUILD=$(echo ${BACK_DIAG}| jq -r '.foundry.build')
+                                    BACKUP_DIAG_VER="${BACKUP_GENERATION}.${BACKUP_BUILD}"
+                                    log_daemon_msg " - v${BACKUP_DIAG_VER} in ${FILE_DIAG}"
+                                    STRIP=$(getParentDirectoriesToStrip ${VER_RESTORE})
+                                    
+                              else
+                                    log_failure_msg "Missing one or more: Config, Data, or Logs"
+                                    false
+                                    break;
+                              fi
+                        else
+                              log_failure_msg "${OPT} is an invalid option."
+                        fi
+                        ;;
+                  0)
+                        log_failure_msg "Canceled."
+                        false
+                        break
+                        ;;
+                  *)
+                        log_failure_msg "Invalid option."
+                        ;;                  
+            esac
         done
-        log_end_msg $?      
+
+        log_end_msg $?
+        exit 1   
         ;;
   restoredev)
         log_daemon_msg "Restoring up Foundry VTT."
