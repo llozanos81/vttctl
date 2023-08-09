@@ -528,7 +528,7 @@ case "$1" in
       if [[ "${IS_RUNNING}" == "true" ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
       elif [[ ! ${DEFAULT_VER} == "" ]]; then
-            RUNNING_VER=${DEFAULT_VER}           
+            RUNNING_VER=${DEFAULT_VER}
       fi
 
       if [[ (! -z $2 && $2 == "--force") || (${RUNNING_VER} == "") ]];then
@@ -536,7 +536,7 @@ case "$1" in
             VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '[0-9]{1,2}\.[0-9]{3,4}' | grep -v '^$')
       else
             # List all available extracted binaries folders but running or default version
-            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep "^d" | awk '$NF ~ /^[0-9]{1,2}\.[0-9]{3,4}$/ {print $NF}' | grep -v "${RUNNING_VER}")
+            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}")
       fi
 
       #  Validating if is there any available FoundryVTT binaries.
