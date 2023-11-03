@@ -1,13 +1,15 @@
 # TODO v1.0
 - Redo help section
-- Add HTTPS support. (Caddy?)
+- Integrate with Traefik
+- Add HTTPS support. (traefik?)
 - Add support for Amazon Linux 2
 - Add support for Ubuntu 20.04
 - Restore vttctl generated backups
 - Restore any foundryvtt backup tar, tar.gz or tar.bz2 into vttctl structure.
+- Do not allow creation of vttctl backups if FoundryVTT version is 11.311 or newer (use native tool instead).
 - validate if downloaded file it's actually the FoundryVTT NodeJS application
 - Add configuration Wizard for env file
-- Add upgrade option at CLI
+- Add upgrade VTT version option
 - Add security to /backups (.htaccess?)
 - Create a binary instead of a script
 - Integrate with bash autocomplete
@@ -27,5 +29,5 @@
 
 
 # DISCARDED
-- Add flag for compression using gz for backup like ./vttctl.sh backup -z | Not implemented, most of Foundry assets are already compressed. (webp,webm,ogg,mp3,jpg,etc.)
+- Add a flag for compression using 'gz' for backups, like './vttctl.sh backup -z'. It's not implemented because most of Foundry's assets are already compressed (webp, webm, ogg, mp3, jpg, etc.). Compressing them again would result in diminishing returns.
 

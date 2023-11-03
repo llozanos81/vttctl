@@ -8,23 +8,17 @@ services:
           - PORT=3000
       ports:
         - "3000:3000/tcp"
-      networks:
-       - internal_A
     app:
       user: 3000:3000
       restart: always
       environment:
        - VARS=${VARS}
       image: foundryvtt:${TAG:-latest}
+      networks:
+        - backend
       volumes:
        - UserData:/home/foundry/userdata
-       - shared_jb2a_patreon:/home/foundry/userdata/Data/modules/jb2a_patreon
-       - shared_ivan-duch-music-packs:/home/foundry/userdata/Data/modules/ivan-duch-music-packs/
-       - shared_tabletop-rpg-music:/home/foundry/userdata/Data/modules/tabletop-rpg-music/
-       - shared_michaelghelfi:/home/foundry/userdata/Data/modules/michaelghelfi/
-       - shared_dransky-lost-mines-maps:/home/foundry/userdata/Data/modules/dransky-lost-mines-maps/
-      networks:
-       - internal_A
+       - ../backups/FoundryVTT/native:/home/foundry/userdata/Backups
     web:
       image: nginx:alpine
       restart: always
@@ -35,20 +29,18 @@ services:
       ports:
         - "${NGINX_PROD_PORT}:80/tcp"
       networks:
-       - internal_A
+        - frontend
+        - backend
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=frontend"
+        - "traefik.http.routers.vtt.entrypoints=web"
+        - "traefik.http.routers.vtt.rule=Host(`vtt.legendaryrealms.com.mx`)"
 
 volumes:
     UserData:
-    shared_jb2a_patreon:
-        name: shared_jb2a_patreon
-    shared_ivan-duch-music-packs:
-        name: shared_ivan-duch-music-packs
-    shared_tabletop-rpg-music:
-        name: shared_tabletop-rpg-music
-    shared_michaelghelfi:
-        name: shared_michaelghelfi
-    shared_dransky-lost-mines-maps:
-        name: shared_dransky-lost-mines-maps
 
 networks:
-    internal_A:
+  frontend:
+    external: true
+  backend:
