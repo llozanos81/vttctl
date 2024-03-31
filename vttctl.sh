@@ -1,6 +1,7 @@
 #!/bin/bash
-# Version: 0.03
+# Version: 0.04
 
+source ${HOME}/.bash_aliases
 VTT_HOME=$(pwd)
 ENV_FILE="${VTT_HOME}/.env"
 
@@ -926,15 +927,42 @@ case "$1" in
                 wc
                 xargs)
 
-      for cmd in "${commands[@]}"; do
-       if ! type "$cmd" >/dev/null 2>&1; then
-            if ! command -v "${cmd}" >/dev/null 2>&1; then
-                  log_daemon_msg " - Command not found: ${cmd}"
-                  false
-                  log_end_msg $?  
-                  exit
+
+for cmd in "${commands[@]}"; do
+      if [[ -z $(type -P "$cmd") ]]; then
+            if [[ -z $(command -v "$cmd") ]]; then
+                  if ! alias | grep -wq $cmd ; then
+                        log_daemon_msg " - Command not found: ${cmd}"
+                        if [ "${cmd}" == "docker-compose" ]; then
+                              log_daemon_msg " - If 'docker compose' is available, create an alias for docker-compose using docker compose."
+                              echo "echo 'alias docker-compose=\"docker compose\"' >> ~/.bash_aliases"
+                        fi                       
+                        false
+                        log_end_msg $?
+                        exit
+                  fi
             fi
-       fi
+      fi
+done
+exit
+
+      for cmd in "${commands[@]}"; do
+            if ! type "$cmd" >/dev/null 2>&1; then
+                  if ! command -v "${cmd}" >/dev/null 2>&1; then
+                        echo $?
+                        echo $cmd
+                        if alias | grep -wq "${cmd}" >/dev/null 2>&1; then
+                              log_daemon_msg " - Command not found: ${cmd}"
+                              if [ "${cmd}" == "docker-compose" ]; then
+                                    log_daemon_msg " - If 'docker compose' is available, create an alias for docker-compose using docker compose."
+                                    echo "echo 'alias docker-compose=\"docker compose\"' >> ~/.bash_aliases"
+                              fi                       
+                              false
+                              log_end_msg $?  
+                              exit
+                        fi
+                  fi
+            fi
       done
       
 

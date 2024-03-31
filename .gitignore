@@ -2,3 +2,10 @@
 downloads/*
 backups
 clonedata.sh
+.venv
+*.pyc
+*.pyo
+*.pyd
+*.spec
+build
+dist
