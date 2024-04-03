@@ -1,15 +1,17 @@
 #!/bin/bash
 # Version: 0.04
 
-source ${HOME}/.bash_aliases
+TMP_DIR="/tmp"
+source "${HOME}/.bash_aliases"
+shopt -s expand_aliases
 VTT_HOME=$(pwd)
 ENV_FILE="${VTT_HOME}/.env"
 
 function stop() {
       CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
       docker exec -it ${CONT_NAME} pm2 stop all
-      VARS="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
-      VARS="" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
+      VARS="" FQDN="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
+      VARS="" FQDN="" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
 }
 
 function getLogs() {
@@ -21,7 +23,7 @@ function liveLogs() {
 }
 
 function getVersion() {
-    RESPONSE=/tmp/.response.txt
+    RESPONSE=${TMP_DIR}/.http_response.txt
     rm -rf ${RESPONSE}
     status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o ${RESPONSE})
     if [ ${status} == 200 ]; then
@@ -47,10 +49,7 @@ function generateBackupListing() {
       BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
 
       case "${MAJOR_VER}" in
-            9)
-                  TEMPLATE_VER=9
-            ;;
-            10)
+            9|10)
                   # 9 and 10 shares template
                   TEMPLATE_VER=9
             ;;
@@ -462,7 +461,8 @@ case "$1" in
   attach)
         APP_CONTAINER=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
         RUNNING_VER=$(docker container ls -a | awk '/vtt/ && /app/ { split($2, a, ":"); print a[2] }')
-        docker exec -it ${APP_CONTAINER} ash -c "echo Attaching to FoundryVTT ${RUNNING_VER} app container ...; export PS1=\"FoundryVTT:$ \"; cd; ls -l; /bin/ash"
+        echo ' '
+        docker exec -it ${APP_CONTAINER} ash -c "echo Attaching to FoundryVTT ${RUNNING_VER} app container ...; export PS1=\"FoundryVTT:$ \"; cd; ls -l; echo ' ' ; /bin/ash"
         log_daemon_msg "Detaching from FoundryVTT ${RUNNING_VER} app container."
         log_end_msg $?
         exit 1
@@ -628,8 +628,8 @@ case "$1" in
   clean)  
         $0 stop
         echo "Deleting FoundryVTT containers ..."
-        VARS="" TAG=${TAG} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
-        VARS="" TAG=${TAG} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
+        VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
+        VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
         exit 1
         ;;
   cleanup)
@@ -928,42 +928,23 @@ case "$1" in
                 xargs)
 
 
-for cmd in "${commands[@]}"; do
-      if [[ -z $(type -P "$cmd") ]]; then
-            if [[ -z $(command -v "$cmd") ]]; then
-                  if ! alias | grep -wq $cmd ; then
-                        log_daemon_msg " - Command not found: ${cmd}"
-                        if [ "${cmd}" == "docker-compose" ]; then
-                              log_daemon_msg " - If 'docker compose' is available, create an alias for docker-compose using docker compose."
-                              echo "echo 'alias docker-compose=\"docker compose\"' >> ~/.bash_aliases"
-                        fi                       
-                        false
-                        log_end_msg $?
-                        exit
-                  fi
-            fi
-      fi
-done
-exit
-
       for cmd in "${commands[@]}"; do
-            if ! type "$cmd" >/dev/null 2>&1; then
-                  if ! command -v "${cmd}" >/dev/null 2>&1; then
-                        echo $?
-                        echo $cmd
-                        if alias | grep -wq "${cmd}" >/dev/null 2>&1; then
+            if [[ -z $(type -P "$cmd") ]]; then
+                  if [[ -z $(command -v "$cmd") ]]; then
+                        if ! alias | grep -wq $cmd ; then
                               log_daemon_msg " - Command not found: ${cmd}"
                               if [ "${cmd}" == "docker-compose" ]; then
                                     log_daemon_msg " - If 'docker compose' is available, create an alias for docker-compose using docker compose."
                                     echo "echo 'alias docker-compose=\"docker compose\"' >> ~/.bash_aliases"
                               fi                       
                               false
-                              log_end_msg $?  
+                              log_end_msg $?
                               exit
                         fi
                   fi
             fi
       done
+
       
 
 
@@ -979,9 +960,9 @@ exit
   start)
         if [[ -n ${DEFAULT_VER} ]]; then
             log_begin_msg "Starting ${DESC}" "${NAME} ${DEFAULT_VER}"
-            VARS=$(echo "FQDN=${FQDN} PROXY_PORT=${PUBLIC_PROD_PORT}" | base64)
+            VARS=$(echo "FQDN=${FQDN} PROXY_PORT=${PUBLIC_PROD_PORT} UPNP=false" | base64)
 
-            TAG=${TAG} VARS=${VARS} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
+            TAG=${TAG} FQDN=${FQDN} VARS=${VARS} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
             if [ "${DEV_ENABLED}" == "true" ]; then
                   docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml up -d -e VARS=${VARS} -e TAG=${TAG}
             fi
