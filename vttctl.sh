@@ -324,6 +324,8 @@ function isPlatformSupported() {
             fi
       done
 
+      echo "supported=${matchFoundSupported}"
+      echo "notsupported=${matchFoundNotSupported}"
       if [[ ! ${matchFoundSupported} && ! ${matchFoundNotSupported} ]]; then
             echo -e "${light_yellow}not tested${reset}"
       fi
