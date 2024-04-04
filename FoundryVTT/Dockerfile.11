@@ -5,12 +5,12 @@ COPY ./${BUILD_VER}/ .
 RUN set -xe \
     && apk add --no-cache --update npm nodejs python3 make g++ \
     && cd resources/app/ \
-    && npm install classic-level --build-from-source
+    && if [ "$(uname -m)" != "x86_64" ]; then npm install classic-level --build-from-source; fi
 
 FROM alpine:3.18
 ARG TIMEZONE
 WORKDIR /home/foundry/vtt
-COPY --from=build /home/foundry/vtt ./
+
 RUN set -xe \
     && export \
     && apk add --no-cache --update shadow nodejs icu-data-full npm tzdata \
@@ -21,13 +21,16 @@ RUN set -xe \
     && npm install -g pm2 \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
+    && chown -R foundry:foundry /home/foundry/
+
+COPY --chown=foundry:foundry --from=build /home/foundry/vtt ./
+USER foundry
+RUN set -xe \
     && sed -i 's/data-action="update"/data-action="disabled"/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
     && sed -i 's/data-tooltip="Update"/data-tooltip="Update disabled, Use VTTctl instead."/' /home/foundry/vtt/resources/app/templates/setup/setup-menu.hbs \
-    && chown foundry:foundry -R /home/foundry/ \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
     && touch /home/foundry/.firstboot
 
 ENV TZ=${TIMEZONE}
-USER foundry
 EXPOSE 30000
 ENTRYPOINT [ "/home/foundry/vtt/docker-entrypoint.sh" ]

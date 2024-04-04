@@ -2,7 +2,6 @@ FROM alpine:3.14
 ARG BUILD_VER
 ARG TIMEZONE
 WORKDIR /home/foundry/vtt
-COPY ./${BUILD_VER}/ .
 RUN set -xe \
     && export \
     && apk add --no-cache --update shadow nodejs npm tzdata \
@@ -16,17 +15,20 @@ RUN set -xe \
     && npm cache clean --force \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
+    && chown -R foundry:foundry /home/foundry/
+
+USER foundry
+COPY --chown=foundry:foundry ./${BUILD_VER}/ .
+RUN set -xe \
     && sed -i 's/Update Software/Update Disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"You may update your Foundry Virtual Tabletop software to a new version by checking for update on your preferred Software Update Channel."/"In app updates are disabled, please use VTTctl for updates and upgrades instead."/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"Check For Update"/"In app updates are disabled, please use VTTctl for updates and upgrades instead."/' /home/foundry/vtt/resources/app/public/lang/en.json \    
     && sed -i 's/{{#unless updateButtonEnabled}}disabled{{\/unless}}/disabled/' /home/foundry/vtt/resources/app/templates/setup/setup-config.html \    
-    && chown foundry:foundry -R /home/foundry/ \
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
     && touch /home/foundry/.firstboot
 
 
 
 ENV TZ=${TIMEZONE}
-USER foundry
 EXPOSE 30000
 ENTRYPOINT [ "/home/foundry/vtt/docker-entrypoint.sh" ]
