@@ -1,9 +1,9 @@
 # TODO v1.0
+- validate for docker frontend network
 - Redo help section
 - Integrate with Traefik
 - Add HTTPS support. (traefik?)
 - Add support for Amazon Linux 2
-- Add support for Ubuntu 20.04
 - Restore vttctl generated backups
 - Restore any foundryvtt backup tar, tar.gz or tar.bz2 into vttctl structure.
 - Do not allow creation of vttctl backups if FoundryVTT version is 11.311 or newer (use native tool instead).
@@ -17,7 +17,7 @@
 # DONE
 - Change logging, drop use of lsb functions
 - Create Public URL for created backup using ./vttctl.sh backup
-- Validate download URL is the correct for Linux deployment
+- Validate download URL is the correct ZIP file for Linux deployment
 - Validate if download Zip major version is vttctl supported
 - fix network interface detection ./vttctl.sh info
 - Backup elapsed time at the end of the backup process
@@ -26,6 +26,9 @@
 - Add support for CentOS 7
 - Add support for RockyLinux 8 and 9
 - Add support for Debian 12
+- Add support for Ubuntu 20.04
+- Improved docker image building process
+- docker compose compatibility (docker-compose alias)
 
 
 # DISCARDED
