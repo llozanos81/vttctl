@@ -297,6 +297,7 @@ function isPlatformSupported() {
       supported=(
             "Ubuntu 22.04 aarch64"
             "Ubuntu 22.04 x86_64"
+            "Ubuntu 20.04 x86_64"
             "CentOS 7.9.2009 x86_64"
             "Rocky 8.8 x86_64"
             "Rocky 9.2 x86_64"
