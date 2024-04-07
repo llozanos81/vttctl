@@ -9,3 +9,7 @@ clonedata.sh
 *.spec
 build
 dist
+build/
+.venv/
+dist/
+*.spec
