@@ -1,4 +1,5 @@
 #!/usr/bin/env ash
+echo "### Starting FoundryVTT Docker container using ... ###"
 OPTIONS_FILE=/home/foundry/userdata/Config/options.json
 
 decoded_str=$(echo "$VARS" | base64 -d)
