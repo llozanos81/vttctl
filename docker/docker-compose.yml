@@ -16,7 +16,7 @@ services:
       networks:
         - backend
       volumes:
-       - UserData:/home/foundry/userdata
+       - foundryvtt_UserData:/home/foundry/userdata
        - ../backups/FoundryVTT/native:/home/foundry/userdata/Backups
     web:
       image: nginx:alpine
@@ -37,7 +37,8 @@ services:
         - "traefik.http.routers.vtt.rule=Host(`${FQDN}`)"
 
 volumes:
-    UserData:
+    foundryvtt_UserData:
+       external: true
 
 networks:
   frontend:

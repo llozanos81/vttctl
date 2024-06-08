@@ -1,6 +1,9 @@
 #!/bin/bash
 # Version: 0.05
 
+IP_IDENT="4.ident.me"
+#IP_IDENT="ifconfig.me/ip"
+
 TMP_DIR="/tmp"
 source "${HOME}/.bash_aliases"
 shopt -s expand_aliases
@@ -54,6 +57,7 @@ function generateBackupListing() {
                   TEMPLATE_VER=9
             ;;
             11|12)
+                  # 11 and 12 shares template
                   TEMPLATE_VER=11
             ;;
             
@@ -422,7 +426,7 @@ CPU_COUNT=$(awk '/^processor/ {count++} END {print count}' /proc/cpuinfo)
 TOTAL_RAM=$(free -mh | sed -n '2 s/i/B/gp' | awk '{print $2}')
 LOCAL_IP=$(getIPaddrByGW)
 ETHERNET=$(ip add | grep -v altname | grep -B2 ${LOCAL_IP} | grep UP | awk {'print $2'} | awk '{sub(/.$/,"")}1')
-PUBLIC_IP=$(curl -s ifconfig.me/ip)
+PUBLIC_IP=$(curl -s ${IP_IDENT})
 
 LINUX_DISTRO="N/A lsb_release missing"
 
@@ -623,7 +627,17 @@ case "$1" in
                   esac
             done
       fi
-      
+
+      # Create frontend network if not exists
+      if [[ -z $(docker network ls --filter name=frontend --format "{{.Name}}") ]]; then
+            docker network create frontend
+      fi
+
+      # Create foundryvtt_UserData volume if not exists
+      if [[ -z $(docker volume ls --filter name=foundryvtt_prod_UserData --format "{{.Name}}") ]]; then
+            docker volume create foundryvtt_prod_UserData
+      fi
+
       log_end_msg $?
       exit 1
       ;;
@@ -650,6 +664,9 @@ case "$1" in
         exit 1
         ;;
   cleanup)
+      if [[ (! -z $2 && $2 == "--all") ]];then
+            DEFAULT_VER=""
+      fi
       DIR_VERSIONS=$(ls -ld ${VTT_HOME}/FoundryVTT/*[0-9]* | awk '/^d/ {print $NF}')
       IMG_VERSIONS=$(docker images -a | grep vtt | awk {'print $1":"$2'})
       BIN_VERSIONS=$(ls ${VTT_HOME}/downloads/ | grep -E '[0-9]{2,3}\.[0-9]{2,3}')
@@ -748,8 +765,18 @@ case "$1" in
                   echo ${VERSIONS}
             fi
         fi
-        log_daemon_msg "Setting default version of Foundry VTT. (Current ${DEFAULT_VER})"
+        DEFAULT_VER=${DEFAULT_VER:-null}
+        if [[ ${DEFAULT_VER} == "null" ]]; then
+            VERSION_MSG="Default version is not set"
+        else
+            VERSION_MSG="Default version ${DEFAULT_VER}"
+        fi
+        log_daemon_msg "Setting default version of Foundry VTT. (${VERSION_MSG})"
         VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+        if [[ -z ${VERSIONS} ]]; then
+            log_failure_msg "No available built FoundryVTT images, can't set default."
+            exit 1
+        fi
         OPT=""
         while [[ ${OPT} != "0" ]]; do
               word_count=$(echo "${VERSIONS}" | wc -w)
