@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.04
+# Version: 0.05
 
 TMP_DIR="/tmp"
 source "${HOME}/.bash_aliases"
@@ -631,6 +631,21 @@ case "$1" in
         echo "Deleting FoundryVTT containers ..."
         VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
         VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
+        if [[ (! -z $2 && $2 == "--all") ]];then
+            read -p "Are you sure you want to delete all data? (y/n): " answer
+            if [[ $answer == "y" ]]; then
+                  echo "Deleting userdata docker volume ..."
+                  VOLUME_NAME=$(docker volume ls --filter "name=UserData" --format "{{.Name}}")
+                  if [[ -n $VOLUME_NAME ]]; then
+                        docker volume rm $VOLUME_NAME
+                        echo " - ${VOLUME_NAME} volume deleted."
+                  else
+                        echo " - UserData volume does not exist."
+                  fi
+            else
+                  echo "Operation cancelled."
+            fi
+        fi
         exit 1
         ;;
   cleanup)
@@ -657,12 +672,22 @@ case "$1" in
             fi
       done
 
-      BIGGEST=${!max_variable}
+      if [[ -n $max_variable ]]; then
+            BIGGEST=${!max_variable}
+      else
+            echo "Nothing to cleanup."
+            exit 1
+      fi
 
       pattern="[0-9]{1,3}\.[0-9]{1,3}"
 
       count=1
-      echo "Default version ${DEFAULT_VER}"
+      DEFAULT_VER=${DEFAULT_VER:-null}
+      if [[ ${DEFAULT_VER} == "null" ]]; then
+            echo "Default version is not set"
+      else
+            echo "Default version ${DEFAULT_VER}"            
+      fi
       while [[ ${OPT} != "0" ]]; do
             list=()
             echo "Choose version to clean/delete ('0' to cancel):"
@@ -789,6 +814,7 @@ case "$1" in
             MAJOR_MINOR=$(jq -r '.foundryvtt | map(.version | capture("(?<major>\\d+)")) | sort_by(.major | tonumber) | first | .major' ${FOUNDRY_VERSIONS})
             MAJOR_MAJOR=$(jq -r '.foundryvtt | map(.version | capture("(?<major>\\d+)")) | sort_by(.major | tonumber) | last | .major' ${FOUNDRY_VERSIONS})
 
+
             if [[ (${MAJOR_VER} -ge ${MAJOR_MINOR}) && (${MAJOR_VER} -le ${MAJOR_MAJOR}) ]]; then
                   DEST="${VTT_HOME}/FoundryVTT"
                   count=$(find ${DEST}/ -type d -name "[0-9][0-9].*[0-9][0-9][0-9]" | wc -l)
@@ -799,7 +825,7 @@ case "$1" in
 
                   FILE=$(basename "$2" | awk -F\? {'print $1'})
                   # Validate the URL if contains ZIP file
-                  echo $2 | grep -E "/[^/]*\.zip\?AWSAccessKeyId" >/dev/null 2>&1;
+                  echo $2 | grep -E "/[^/]*\.zip\?verify=" >/dev/null 2>&1;
 
                   # Check the exit code of the previous command
                   if [ $? -eq 0 ]; then

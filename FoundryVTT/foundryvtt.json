@@ -14,6 +14,11 @@
         "version": "11.xxx",
         "nodejs": "18.x.x",
         "alpine": "3.18"
+      },
+      {
+        "version": "12.xxx",
+        "nodejs": "20.x.x",
+        "alpine": "3.20"
       }
     ]
   }
