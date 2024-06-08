@@ -53,9 +53,10 @@ function generateBackupListing() {
                   # 9 and 10 shares template
                   TEMPLATE_VER=9
             ;;
-            11)
+            11|12)
                   TEMPLATE_VER=11
             ;;
+            
       esac
 
       BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
@@ -637,7 +638,7 @@ case "$1" in
                   echo "Deleting userdata docker volume ..."
                   VOLUME_NAME=$(docker volume ls --filter "name=UserData" --format "{{.Name}}")
                   if [[ -n $VOLUME_NAME ]]; then
-                        docker volume rm $VOLUME_NAME
+                        docker volume rm $VOLUME_NAME >/dev/null 2>&1
                         echo " - ${VOLUME_NAME} volume deleted."
                   else
                         echo " - UserData volume does not exist."

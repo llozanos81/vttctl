@@ -8,7 +8,7 @@ services:
       ports:
         - "3000:3000/tcp"
     app:
-      user: 3000:3000 # foundry uid and gid
+      user: 3000:3000 # foundry uid and gid (do not change!)
       restart: always
       environment:
        - VARS=${VARS}
