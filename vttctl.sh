@@ -226,7 +226,7 @@ function prodBackupRestore() {
             --rm \
             -v foundryvtt_UserData:/source/ \
             -v $(pwd)/backups/FoundryVTT/:/backup \
-            busybox
+            busybox \
             ash -c "tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=${STRIP_COMPONENTS}; \
                     chown -R 3000:3000 /source/"
 }
