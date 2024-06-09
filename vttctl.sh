@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.05
+# Version: 0.06
 
 IP_IDENT="4.ident.me"
 #IP_IDENT="ifconfig.me/ip"
@@ -17,7 +17,6 @@ function stop() {
       CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
       docker exec -it ${CONT_NAME} pm2 stop all
       VARS="" FQDN="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
-      VARS="" FQDN="" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
 }
 
 function getLogs() {
@@ -185,39 +184,26 @@ function getParentDirectoriesToStrip() {
       parent_dirs=()
 
       while IFS= read -r line; do
-      # Use the first path to initialize the parent_dirs array
-      if [[ -z "${parent_dirs[@]}" ]]; then
-            IFS="/" read -ra parts <<< "$line"
-            parent_dirs=("${parts[@]}")
-      else
-            IFS="/" read -ra parts <<< "$line"
-            for i in "${!parts[@]}"; do
-                  if [[ "${parts[i]}" != "${parent_dirs[i]}" ]]; then
-                  # Trim the parent_dirs array to the common parent
-                  parent_dirs=("${parent_dirs[@]:0:i}")
-                  break
-                  fi
-            done
-      fi
+            # Use the first path to initialize the parent_dirs array
+            if [[ -z "${parent_dirs[@]}" ]]; then
+                  IFS="/" read -ra parts <<< "$line"
+                  parent_dirs=("${parts[@]}")
+            else
+                  IFS="/" read -ra parts <<< "$line"
+                  for i in "${!parts[@]}"; do
+                        if [[ "${parts[i]}" != "${parent_dirs[i]}" ]]; then
+                        # Trim the parent_dirs array to the common parent
+                        parent_dirs=("${parent_dirs[@]:0:i}")
+                        break
+                        fi
+                  done
+            fi
       done <<< "$tar_output"
 
       # Calculate the value for --strip-components
       strip_components=${#parent_dirs[@]}
 
       echo "$strip_components"      
-}
-
-function prodLatestRestore() {
-    REST_FILE=$(ls -t backups/FoundryVTT/*tar | head -1)
-    FILE_NAME=$(basename ${REST_FILE})
-    
-    docker run \
-                --rm \
-                -v foundryvtt_UserData:/source/ \
-                -v $(pwd)/backups/FoundryVTT/:/backup \
-                busybox \
-                ash -c "tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=1"
-
 }
 
 function prodBackupRestore() {
@@ -232,20 +218,6 @@ function prodBackupRestore() {
             busybox \
             ash -c "tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=${STRIP_COMPONENTS}; \
                     chown -R 3000:3000 /source/"
-}
-
-function devLatestRestore() {
-    REST_FILE=$(ls -t backups/*tar | head -1)
-    FILE_NAME=$(basename ${REST_FILE})
-    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
-    
-    docker run \
-                --rm \
-                --volumes-from $CONT_NAME \
-                -v $VTT_HOME/backups/FoundryVTT/:/backup \
-                busybox \
-                tar -xvf /backup/${FILE_NAME} -C /
-
 }
 
 function fixOwner() {
@@ -399,8 +371,6 @@ VTT_NAME=FoundryVTT
 NAME=${VTT_NAME}
 PROD_PROJECT="${NAME}_prod"
 PROD_PROJECT=${PROD_PROJECT,,}
-DEV_PROJECT="${NAME}_dev"
-DEV_PROJECT=${DEV_PROJECT,,}
 REGEX_URL='(https?)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
 TAG=${DEFAULT_VER}
 if [ ! -z ${HOSTNAME} ]; then
@@ -480,6 +450,7 @@ else
       CPU_ARCH=$(uname -m)
 fi
 
+# Main Switch Case
 case "$1" in
   attach)
         APP_CONTAINER=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
@@ -652,8 +623,8 @@ case "$1" in
       fi
 
       # Create foundryvtt_UserData volume if not exists
-      if [[ -z $(docker volume ls --filter name=foundryvtt_prod_UserData --format "{{.Name}}") ]]; then
-            docker volume create foundryvtt_prod_UserData
+      if [[ -z $(docker volume ls --filter name=foundryvtt_UserData --format "{{.Name}}") ]]; then
+            docker volume create foundryvtt_UserData
       fi
 
       log_end_msg $?
@@ -663,12 +634,11 @@ case "$1" in
         $0 stop
         echo "Deleting FoundryVTT containers ..."
         VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
-        VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
         if [[ (! -z $2 && $2 == "--all") ]];then
             read -p "Are you sure you want to delete all data? (y/n): " answer
             if [[ $answer == "y" ]]; then
                   echo "Deleting userdata docker volume ..."
-                  VOLUME_NAME=$(docker volume ls --filter "name=UserData" --format "{{.Name}}")
+                  VOLUME_NAME=$(docker volume ls --filter "name=foundryvtt_UserData" --format "{{.Name}}")
                   if [[ -n $VOLUME_NAME ]]; then
                         docker volume rm $VOLUME_NAME >/dev/null 2>&1
                         echo " - ${VOLUME_NAME} volume deleted."
@@ -847,7 +817,7 @@ case "$1" in
   diag)
             docker run \
                   --rm \
-                  -v foundryvtt_prod_UserData:/source/ \
+                  -v foundryvtt_UserData:/source/ \
                   busybox \
                   ash -c "if [ -f /source/Logs/diagnostics.json ]; then cat /source/Logs/diagnostics.json; fi"
 
@@ -961,7 +931,7 @@ case "$1" in
         exit 1
         ;;
   monitor)
-            CONT_NAME=$(docker container ls -a | grep vtt | grep app | grep prod | awk '{print $1}')
+            CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ && /prod/ {print $1}')
             docker exec -it ${CONT_NAME} pm2 monit
             exit 1
         ;;
@@ -1036,9 +1006,6 @@ case "$1" in
             VARS=$(echo "FQDN=${FQDN} PROXY_PORT=${PUBLIC_PROD_PORT} UPNP=false" | base64)
 
             TAG=${TAG} FQDN=${FQDN} VARS=${VARS} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
-            if [ "${DEV_ENABLED}" == "true" ]; then
-                  docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml up -d -e VARS=${VARS} -e TAG=${TAG}
-            fi
             fixOwner
             sleep 2
             $0 info
@@ -1171,14 +1138,6 @@ case "$1" in
         log_end_msg $?
         exit 1   
         ;;
-  restoredev)
-        log_daemon_msg "Restoring up Foundry VTT."
-        devLatestRestore
-        $0 reload
-        log_end_msg $?      
-        ;;
-
-
   status)
       if [[ -n $2 && $2 == "--json=true" ]]; then
             json=$(getVersion)
@@ -1230,7 +1189,7 @@ case "$1" in
       getWebStatus
         ;;
   *)
-        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
+      log_failure_msg "Usage: $0 {attach|backup|build|clean|cleanup|default|diag|download|extract|fix|info|logs|monitor|reload|force-reload|restore|start|status|stop|userdata|validate|web}"
         exit 1
         ;;
 esac
