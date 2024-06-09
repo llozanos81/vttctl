@@ -1137,7 +1137,7 @@ case "$1" in
                                     BACKUP_DIAG_VER="${BACKUP_GENERATION}.${BACKUP_BUILD}"
                                     log_daemon_msg " - v${BACKUP_DIAG_VER} in ${FILE_DIAG}"
                                     STRIP=$(getParentDirectoriesToStrip ${VER_RESTORE})
-                                    prodRestore ${VER_RESTORE} ${STRIP}
+                                    prodBackupRestore ${VER_RESTORE} ${STRIP}
                                     echo " "
                                     echo "Restore completed."
                                     RESTORED=true
