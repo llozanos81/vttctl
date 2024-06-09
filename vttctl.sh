@@ -210,11 +210,25 @@ function prodLatestRestore() {
     
     docker run \
                 --rm \
-                -v foundryvtt_prod_UserData:/source/ \
+                -v foundryvtt_UserData:/source/ \
                 -v $(pwd)/backups/FoundryVTT/:/backup \
                 busybox \
                 tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=1
 
+}
+
+function prodBackupRestore() {
+      REST_FILE=$1
+      STRIP_COMPONENTS=$2
+      FILE_NAME=$(basename ${REST_FILE})
+      
+      docker run \
+            --rm \
+            -v foundryvtt_UserData:/source/ \
+            -v $(pwd)/backups/FoundryVTT/:/backup \
+            busybox \
+            "tar -xvf /backup/${FILE_NAME} -C /source/ --strip-components=${STRIP_COMPONENTS}; \
+            chown -R 3000:3000 /source/"
 }
 
 function devLatestRestore() {
@@ -475,6 +489,7 @@ case "$1" in
         ;;
   backup)
         IS_RUNNING=$($0 status --json=true | jq -r .running)
+
         WORLD=$($0 status --json=true | jq -r .world)
 
         if [[ ${WORLD} == "inactive" ]]; then
@@ -1122,7 +1137,10 @@ case "$1" in
                                     BACKUP_DIAG_VER="${BACKUP_GENERATION}.${BACKUP_BUILD}"
                                     log_daemon_msg " - v${BACKUP_DIAG_VER} in ${FILE_DIAG}"
                                     STRIP=$(getParentDirectoriesToStrip ${VER_RESTORE})
-                                    
+                                    prodRestore ${VER_RESTORE} ${STRIP}
+                                    echo " "
+                                    echo "Restore completed."
+                                    exit 1
                               else
                                     log_failure_msg "Missing one or more: Config, Data, or Logs"
                                     false
