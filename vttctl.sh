@@ -1140,7 +1140,8 @@ case "$1" in
                                     prodRestore ${VER_RESTORE} ${STRIP}
                                     echo " "
                                     echo "Restore completed."
-                                    exit 1
+                                    RESTORED=true
+                                    break;
                               else
                                     log_failure_msg "Missing one or more: Config, Data, or Logs"
                                     false
@@ -1159,6 +1160,9 @@ case "$1" in
                         log_failure_msg "Invalid option."
                         ;;                  
             esac
+            if [[ ${RESTORED} == "true" ]]; then
+                  break
+            fi
         done
 
         log_end_msg $?
