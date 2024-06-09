@@ -5,8 +5,11 @@ IP_IDENT="4.ident.me"
 #IP_IDENT="ifconfig.me/ip"
 
 TMP_DIR="/tmp"
-source "${HOME}/.bash_aliases"
-shopt -s expand_aliases
+if [ -f "${HOME}/.bash_aliases" ]; then
+      source "${HOME}/.bash_aliases"
+      shopt -s expand_aliases
+fi
+
 VTT_HOME=$(pwd)
 ENV_FILE="${VTT_HOME}/.env"
 
