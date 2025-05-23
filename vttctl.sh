@@ -124,7 +124,7 @@ function prodBackup()  {
             BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
             docker run \
                 --rm \
-                -v foundryvtt_prod_UserData:/source/ \
+                -v foundryvtt_UserData:/source/ \
                 -v ${BACKUP_HOME}:/backup \
                 busybox \
                 ash -c " \
@@ -554,13 +554,16 @@ case "$1" in
             RUNNING_VER=$($0 status --json=true | jq -r .version)
       elif [[ ! ${DEFAULT_VER} == "" ]]; then
             RUNNING_VER=${DEFAULT_VER}
+            log_daemon_msg "Default version is set to ${RUNNING_VER}"
       fi
 
       if [[ (! -z $2 && $2 == "--force") || (${RUNNING_VER} == "") ]];then
             # List all available extracted binaries folders
+            log_daemon_msg "Forced build, listing all available versions."
             VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '[0-9]{1,2}\.[0-9]{3,4}' | grep -v '^$')
       else
             # List all available extracted binaries folders but running or default version
+            ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}"
             VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}")
       fi
 
@@ -1091,7 +1094,14 @@ case "$1" in
                         file_array+=("$file")
                   fi
             done
-
+            if [[ -z "$STY" && -z "$TMUX" ]]; then
+                  read -p "You are not running in screen or tmux. Do you want to continue? (y/n): " response
+                  case $response in
+                        [Yy]* ) ;;
+                        [Nn]* ) echo "Please use screen or tmux to run restore."; exit 1;;
+                        * ) echo "Invalid response. Please use screen or tmux to run restore."; exit 1;;
+                  esac
+            fi
         log_begin_msg "Restoring up Foundry VTT."
         log_daemon_msg " Existing backups in ${BACKUP_HOME}"
         echo " "
@@ -1127,8 +1137,7 @@ case "$1" in
                               # Print the value
                               BACKUP_FILE=$(basename "$VER_RESTORE")
                               log_daemon_msg "Validating ${BACKUP_FILE} ..."
-                              
-                              directories=$(tar -tf ${VER_RESTORE} | head -n 30 | grep -E '(/Logs/|/Config/|/Data/)' | awk -F/ '{print $2}' | sort -u)
+                              directories=$(tar -tf ${VER_RESTORE} | grep -E '(/Logs/|/Config/|/Data/)' | awk -F/ '{print $2}' | sort -u)
 
                               if echo "$directories" | grep -q "Config" && echo "$directories" | grep -q "Data" && echo "$directories" | grep -q "Logs"; then
                                     log_daemon_msg " - Found valid FoundryVTT backup directory structure!"
