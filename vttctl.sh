@@ -396,6 +396,40 @@ prompt_user_confirm() {
     done
 }
 
+# Reusable function: check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1 || type "$1" >/dev/null 2>&1
+}
+
+# Reusable function: print a numbered list from a space-separated string
+print_numbered_list() {
+    local items=($1)
+    local default="$2"
+    local count=1
+    for item in "${items[@]}"; do
+        if [[ "$item" == "$default" ]]; then
+            echo -e " $count) ${green}${item}${reset}"
+        else
+            echo " $count) $item"
+        fi
+        ((count++))
+    done
+}
+
+# Reusable function: prompt for a version selection from a list
+prompt_version_selection() {
+    local versions="$1"
+    local prompt="$2"
+    local default="$3"
+    local word_count=$(echo "${versions}" | wc -w)
+    if [[ $word_count -gt 1 ]]; then
+        print_numbered_list "${versions}" "${default}"
+        prompt_user_choice "$prompt" $word_count
+    else
+        echo 1
+    fi
+}
+
 # Validate if environment is setted up
 if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
       $0 validate
@@ -640,41 +674,20 @@ case "$1" in
       fi
 
       if [[ (! -z $2 && $2 == "--force") || (${RUNNING_VER} == "") ]];then
-            # List all available extracted binaries folders
             log_daemon_msg "Forced build, listing all available versions."
             VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '[0-9]{1,2}\.[0-9]{3,4}' | grep -v '^$')
       else
-            # List all available extracted binaries folders but running or default version
-            ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}"
             VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}")
       fi
 
-      #  Validating if is there any available FoundryVTT binaries.
       if [[ -z ${VERSIONS} ]]; then
             log_daemon_msg " No FoundryVTT binares available, Use $0 download \"TIMED_URL\""
             log_end_msg $?
       else
             log_daemon_msg " "${VERSIONS}" version(s) available!"
             OPT=""
-            # Print list, choose version to build
             while [[ $OPT != "0" ]]; do
-                  word_count=$(echo "${VERSIONS}" | wc -w)
-
-                  if [[ ${word_count} -gt 1 ]]; then
-                        echo " Choose version to build ('0' to cancel):"
-                        count=1
-
-                        for VER in ${VERSIONS}; do
-                              echo " $count) $VER"
-                              ((count++))
-                        done
-                        OPT=$(prompt_user_choice " Version to build?: " $word_count)
-                  else 
-                        # If only one is available auto-build kicks in.
-                        OPT=1
-                        echo "Building FoundryVTT ${VERSIONS} ..."
-                  fi
-
+                  OPT=$(prompt_version_selection "${VERSIONS}" " Version to build?: " "")
                   # Choosing Build options, up to 9 available versions.
                   case ${OPT} in
                         [1-9])
@@ -817,15 +830,7 @@ case "$1" in
       while [[ ${OPT} != "0" ]]; do
             list=()
             echo "Choose version to clean/delete ('0' to cancel):"
-            for i in ${BIGGEST}; do
-                  [[ $i =~ ${pattern} ]] && version="${BASH_REMATCH[0]}"
-                  if [ ! ${version} == ${DEFAULT_VER} ]; then
-                        list+=($version)
-                        echo "${count}) ${version}"
-                        ((count++))
-                  fi
-            done
-            # read -p "Version to clean/delete?: " OPT
+            print_numbered_list "${BIGGEST}" "${DEFAULT_VER}"
             OPT=$(prompt_user_choice "Version to clean/delete?: " $count)
 
             case ${OPT} in
@@ -888,25 +893,7 @@ case "$1" in
         fi
         OPT=""
         while [[ ${OPT} != "0" ]]; do
-              word_count=$(echo "${VERSIONS}" | wc -w)
-              if [[ $word_count -gt 1 ]]; then
-                  echo "Choose version to build ('0' to cancel):"
-                  count=1
-
-                  for VER in ${VERSIONS}; do
-                        if [[ $VER == ${DEFAULT_VER} ]]; then
-                              echo -e "${count}) ${green}${VER}${reset}"
-                        else
-                              echo "${count}) ${VER}"
-                        fi
-                        ((count++))
-                  done
-                  # read -p "Version to set as default?: " OPT
-                  OPT=$(prompt_user_choice "Version to set as default?: " $count)
-              else 
-                  OPT=1
-              fi
-
+              OPT=$(prompt_version_selection "${VERSIONS}" "Version to set as default?: " "${DEFAULT_VER}")
             case ${OPT} in
                   [1-9])
                         NEW_DEFAULT_VER=$(echo "${VERSIONS}" | sed -n "${OPT}p")
@@ -1350,6 +1337,19 @@ case "$1" in
       
       ;;
 
+  web)
+      getWebStatus
+        ;;
+  *)
+        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload|help}"
+        log_failure_msg "Run '$0 help' for detailed usage and options."
+        exit 1
+        ;;
+esac
+
+exit 0
+
+exit 0
   web)
       getWebStatus
         ;;
