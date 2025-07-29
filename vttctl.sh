@@ -13,94 +13,97 @@ fi
 VTT_HOME=$(pwd)
 ENV_FILE="${VTT_HOME}/.env"
 
-function stop() {
-      CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
-      docker exec -it ${CONT_NAME} pm2 stop all
-      VARS="" FQDN="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
-      VARS="" FQDN="" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
-}
+# Source helper scripts
+source "${VTT_HOME}/src/logging.sh"
+source "${VTT_HOME}/src/docker_helpers.sh"
+# Future: source "${VTT_HOME}/src/workflow_backup.sh"
+# Future: source "${VTT_HOME}/src/workflow_build.sh"
+# Future: source "${VTT_HOME}/src/workflow_restore.sh"
 
-function getLogs() {
-    VARS="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml logs
-}
+# Check for required tools at the start and provide installation hints
+REQUIRED_TOOLS=(basename cat curl cp date docker docker-compose free getent grep id ip jq rm python3 sed sort timedatectl uname unzip wc xargs awk)
+for tool in "${REQUIRED_TOOLS[@]}"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        log_failure_msg "Required tool '$tool' is not installed or not in PATH."
+        log_failure_msg "Please install it using your package manager. Example: sudo apt install $tool"
+        exit 1
+    fi
+done
 
-function liveLogs() {
-    VARS="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml logs -f
-}
-
+# Use mktemp for temporary files
 function getVersion() {
-    RESPONSE=${TMP_DIR}/.http_response.txt
-    rm -rf ${RESPONSE}
-    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o ${RESPONSE})
-    if [ ${status} == 200 ]; then
-        JSON=$(cat ${RESPONSE})
-        if echo ${JSON} | jq -e . >/dev/null 2>&1; then
-            echo ${JSON}
-        elif [ ! ${status} == "200" ]; then
-            echo "{ \"running\": \"error\", \"http\": ${status} }"
+    RESPONSE=$(mktemp)
+    trap 'rm -f "$RESPONSE"' RETURN
+    status=$(curl -s -w %{http_code} http://localhost:${NGINX_PROD_PORT}/api/status -H "Accept: application/json" -o "$RESPONSE")
+    if [ "$status" == 200 ]; then
+        JSON=$(cat "$RESPONSE")
+        if echo "$JSON" | jq -e . >/dev/null 2>&1; then
+            echo "$JSON"
+        elif [ ! "$status" == "200" ]; then
+            echo "{ \"running\": \"error\", \"http\": $status }"
         fi
     else
-        echo "{ \"running\": \"error\", \"http\": ${status} }"
+        echo "{ \"running\": \"error\", \"http\": $status }"
     fi
 }
 
-function appReload() {
-    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
-    docker exec -d ${CONT_NAME} pm2 restart foundry
-    sleep 2
-    log_daemon_msg "FoundryVTT nodejs application reloaded."
+# Centralized version parsing function
+parse_version() {
+    # Usage: parse_version <filename>
+    # Outputs: version, date
+    local filename="$1"
+    local version date
+    version=$(echo "$filename" | grep -oP '\d+\.\d{3}')
+    date=$(echo "$filename" | grep -oP '(?<=-)(2\d{7})(?=\.)')
+    echo "$version|$date"
 }
 
+# Use portable shell constructs for file listing and avoid parsing ls output
 function generateBackupListing() {
-      BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
+    BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
 
-      case "${MAJOR_VER}" in
-            9|10)
-                  # 9 and 10 shares template
-                  TEMPLATE_VER=9
-            ;;
-            11|12)
-                  # 11 and 12 shares template
-                  TEMPLATE_VER=11
-            ;;
-            
-      esac
+    case "${MAJOR_VER}" in
+        9|10) TEMPLATE_VER=9 ;;
+        11|12) TEMPLATE_VER=11 ;;
+    esac
 
-      BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
+    BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
+    BACKUP_FILE_TABLE=""
 
-      BACKUP_FILE_TABLE=""
+    shopt -s nullglob
+    for file in "${VTT_HOME}/backups/FoundryVTT/"*.tar*; do
+        [ -f "$file" ] || continue
+        filename=$(basename "$file")
+        IFS="|" read -r version raw_date <<< "$(parse_version "$filename")"
+        date=""
+        if [ -n "$raw_date" ]; then
+            date=$(date -d "$raw_date" +'%Y-%m-%d' 2>/dev/null || echo "$raw_date")
+        fi
+        size=$(stat -c "%s" "$file" 2>/dev/null || stat -f "%z" "$file")
+        size_human=$(du -h "$file" | awk '{print $1}')
+        md5=$(md5sum "$file" 2>/dev/null | awk '{print $1}')
+        BACKUP_FILE_TABLE="${BACKUP_FILE_TABLE}<tr>
+        <td><a href='${filename}'>${filename}</a></td>
+        <td>${version}</td>
+        <td>${date}</td>
+        <td>${size_human}</td>
+        <td>${md5}</td>
+        </tr>"
+    done
+    shopt -u nullglob
 
-      # Extract version, date, and size information for tar and tar.gz files
-      files=$(ls -hal "${VTT_HOME}/backups/FoundryVTT/" | awk '/^.*\.tar(\.gz|\.bz2)?$/ {print}')
-      while IFS= read -r line; do
-            file=$(echo "${line}" | awk '{print $9}')
-            version=$(echo "${file}" | grep -oP '\d+\.\d{3}')
-            raw_date=$(echo "${file}" | grep -oP '(?<=-)(2\d{7})(?=\.)')
-            date=$(date -d "${raw_date}" +'%Y-%m-%d')
-            size=$(echo "${line}" | awk '{print $5}')
-            md5=$(md5sum ${VTT_HOME}/backups/FoundryVTT/${file} | awk {'print $1'} )
-            BACKUP_FILE_TABLE="${BACKUP_FILE_TABLE}<tr>
-            <td><a href='${file}'>${file}</a></td>
-            <td>${version}</td>
-            <td>${date}</td>
-            <td>${size}</td>
-            <td>${md5}</td>
-            </tr>"
-      done <<< "${files}"
+    VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
 
-      VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
-
-      awk -v refresh="${BACKUP_REFRESH}" \
-          -v file_table="${BACKUP_FILE_TABLE}" \
-          -v version="${VTTCTL_VERSION}" '
-      {
-            gsub("{{BACKUP_REFRESH}}", refresh);
-            gsub("{{BACKUP_FILE_TABLE}}", file_table);
-            gsub("{{VTTCTL_VERSION}}", version);
-            print;
-      }
-      ' "${BACKUP_TEMPLATE}" > "${BACKUP_INDEX}"
-
+    awk -v refresh="${BACKUP_REFRESH}" \
+        -v file_table="${BACKUP_FILE_TABLE}" \
+        -v version="${VTTCTL_VERSION}" '
+    {
+        gsub("{{BACKUP_REFRESH}}", refresh);
+        gsub("{{BACKUP_FILE_TABLE}}", file_table);
+        gsub("{{VTTCTL_VERSION}}", version);
+        print;
+    }
+    ' "${BACKUP_TEMPLATE}" > "${BACKUP_INDEX}"
 }
 
 function progressCursor() {
@@ -115,35 +118,30 @@ function progressCursor() {
 }
 
 function prodBackup()  {
-      METADATA_FILE="${BACKUP_HOME}metadata.json"
-      json=$(getVersion)
+    METADATA_FILE="${BACKUP_HOME}metadata.json"
+    json=$(getVersion)
     if jq -e . >/dev/null 2>&1 <<<"${json}"; then
-        PROD_VER=$(echo ${json} | jq -r .version)
-        if [[ -n ${PROD_VER} ]]; then
+        PROD_VER=$(echo "${json}" | jq -r .version)
+        if [[ -n "${PROD_VER}" ]]; then
             DATESTAMP=$(date +"%Y%m%d")
-            BACKUP_FILE=foundry_userdata_${PROD_VER}-${DATESTAMP}.tar
+            BACKUP_FILE="foundry_userdata_${PROD_VER}-${DATESTAMP}.tar"
             docker run \
                 --rm \
                 -v foundryvtt_UserData:/source/ \
-                -v ${BACKUP_HOME}:/backup \
+                -v "${BACKUP_HOME}":/backup \
                 busybox \
-                ash -c " \
-                tar -cvf /backup/${BACKUP_FILE} \
-                    -C / /source "
- 
-            #BACKPID=$!
-            #progressCursor "$BACKUPID"
+                ash -c "tar -cvf /backup/${BACKUP_FILE} -C / /source "
 
             docker run \
                 --rm \
-                -v ${BACKUP_HOME}:/backup \
+                -v "${BACKUP_HOME}":/backup \
                 busybox \
                 ash -c "chown ${UID}:${GID} /backup/${BACKUP_FILE}"
 
-            DATE_FILE=$(stat --format="%y" "${BACKUP_HOME}/${BACKUP_FILE}" | awk {'print $1'})
+            DATE_FILE=$(stat --format="%y" "${BACKUP_HOME}/${BACKUP_FILE}" | awk '{print $1}')
 
             if [[ -f "${METADATA_FILE}" ]]; then
-                  rm "${METADATA_FILE}"
+                rm "${METADATA_FILE}"
             fi
 
             shopt -s nullglob
@@ -153,20 +151,18 @@ function prodBackup()  {
             first_file=true
 
             for filename in "${BACKUP_HOME}"*.tar "${BACKUP_HOME}"*.tar.gz "${BACKUP_HOME}"*.tar.bz2; do
-                  if [[ -f "${filename}" ]]; then
-                        version=$(basename "${filename}" | awk -F '[._-]' '{print $(NF-3)"."$(NF-2)}')
-                        date=$(basename "${filename}" | grep -oE '[0-9]{8}' | head -n1)
-                        size=$(stat -c "%s" "${filename}")
-                        size_mb=$(awk -v size="${size}" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')  # Rounding up the size and removing decimal places
-
-                        if [[ "${first_file}" == false ]]; then
-                              echo "," >> "${METADATA_FILE}"
-                        else
-                              first_file=false
-                        fi
-
-                        echo "\"${date}\": { \"version\":\"${version}\", \"filename\":\"${WEB_PROTO}://${FQDN}/backups/$(basename "${filename}")\", \"size\":\"${size_mb} MB\" }" >> "${METADATA_FILE}"
-                  fi
+                if [[ -f "${filename}" ]]; then
+                    basefile=$(basename "${filename}")
+                    IFS="|" read -r version date <<< "$(parse_version "$basefile")"
+                    size=$(stat -c "%s" "${filename}")
+                    size_mb=$(awk -v size="${size}" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')
+                    if [[ "${first_file}" == false ]]; then
+                        echo "," >> "${METADATA_FILE}"
+                    else
+                        first_file=false
+                    fi
+                    echo "\"${date}\": { \"version\":\"${version}\", \"filename\":\"${WEB_PROTO}://${FQDN}/backups/${basefile}\", \"size\":\"${size_mb} MB\" }" >> "${METADATA_FILE}"
+                fi
             done
 
             echo "}" >> "${METADATA_FILE}"
@@ -357,30 +353,48 @@ function getWebStatus() {
       docker exec -it ${WEB_CONTAINER} ash -c "curl http://localhost/basic_status"       
 }
 
-# Helper logging functions
-      function log_begin_msg() {
-            echo -e " ${light_green}*${reset} "$1 $2 $3
-      }
+# Helper logging functions moved to src/logging.sh
+#      function log_begin_msg() { ... }
+#      function log_daemon_msg() { ... }
+#      function log_warning_msg() { ... }
+#      function log_failure_msg() { ... }
+#      function log_end_msg() { ... }
 
-      function log_daemon_msg() {
-            echo -e " ${light_white}*${reset} "$1 $2 $3      
-      }
+# Docker/container helper functions moved to src/docker_helpers.sh
+# function stop() { ... }
+# function getLogs() { ... }
+# function liveLogs() { ... }
+# function appReload() { ... }
+# ...etc...
 
-      function log_warning_msg() {
-            echo -e " ${light_yellow}*${reset} "$1 $2 $3
-      }
+# Centralized user input functions
+prompt_user_choice() {
+    local prompt="$1"
+    local max_choice="$2"
+    local choice
+    while true; do
+        read -p "$prompt" choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 0 && choice <= max_choice )); then
+            echo "$choice"
+            return 0
+        else
+            log_warning_msg "Invalid option. Please enter a number between 0 and $max_choice."
+        fi
+    done
+}
 
-      function log_failure_msg() {
-            echo -e " ${light_red}*${reset} "$1 $2 $3           
-      }
-
-      function log_end_msg() {
-            if [ $? -lt 1 ]; then
-                  echo -e " [${light_green}OK${reset}] "
-            else
-                  echo -e " [${light_red}fail${reset}] "
-            fi
-      }
+prompt_user_confirm() {
+    local prompt="${1:-Are you sure? (y/n): }"
+    local answer
+    while true; do
+        read -p "$prompt" answer
+        case "$answer" in
+            [Yy]*) return 0 ;;
+            [Nn]*) return 1 ;;
+            *) log_warning_msg "Please answer y or n." ;;
+        esac
+    done
+}
 
 # Validate if environment is setted up
 if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
@@ -480,7 +494,75 @@ else
       CPU_ARCH=$(uname -m)
 fi
 
+function print_help() {
+    cat <<EOF
+vttctl.sh - FoundryVTT Docker Orchestration Utility
+
+Usage:
+  ./vttctl.sh <command> [options]
+
+Commands:
+  start           Start FoundryVTT services (production and optionally dev)
+  stop            Stop FoundryVTT services
+  build           Build Docker images for FoundryVTT (interactive version selection)
+  backup          Create a backup of FoundryVTT user data
+  restore         Restore FoundryVTT user data from backup (interactive)
+  restoredev      Restore latest dev backup
+  logs            Show logs (use --live for live logs)
+  clean           Remove containers (optionally user data with --all)
+  cleanup         Remove images, binaries, and extracted folders (interactive)
+  default         Set default FoundryVTT version (interactive)
+  info            Show FoundryVTT and system info
+  validate        Check dependencies and generate .env if missing
+  web             Show Nginx web container status
+  monitor         Attach to PM2 monitor in app container
+  diag            Output diagnostics.json from running container
+  download <url>  Download FoundryVTT zip from timed URL
+  extract <ver>   Extract downloaded FoundryVTT zip for version <ver>
+  attach          Attach to running app container
+
+Options:
+  --all           Used with clean/cleanup to remove all user data/volumes
+  --force         Used with build to force rebuild
+  --live          Used with logs for live log tailing
+
+Examples:
+  ./vttctl.sh validate
+  ./vttctl.sh download "TIMED_URL"
+  ./vttctl.sh build
+  ./vttctl.sh default
+  ./vttctl.sh start
+  ./vttctl.sh backup
+  ./vttctl.sh restore
+  ./vttctl.sh clean --all
+
+Environment Variables (from .env):
+  DEFAULT_VER     Default FoundryVTT version to run
+  DOMAIN          Public domain for FoundryVTT
+  HOSTNAME        Hostname prefix for FQDN
+  SSL_ENABLED     Set to "true" to enable HTTPS
+  NGINX_PROD_PORT Port for Nginx reverse proxy
+  PUBLIC_PROD_PORT Public port for FoundryVTT
+  DEV_ENABLED     Set to "true" to enable dev environment
+
+Directory Structure:
+  FoundryVTT/             # All extracted FoundryVTT versions
+  FoundryVTT/Dockerfile.<major>  # Dockerfile per major version
+  FoundryVTT/docker-entrypoint.sh # Entrypoint for app container
+  backups/FoundryVTT/     # Backup tarballs and metadata.json
+  downloads/              # Downloaded FoundryVTT zip files
+  docker/                 # Docker Compose files and Nginx config
+
+For more details, see README.md or the project documentation.
+
+EOF
+}
+
 case "$1" in
+  help|-h|--help)
+        print_help
+        exit 0
+        ;;
   attach)
         APP_CONTAINER=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
         RUNNING_VER=$(docker container ls -a | awk '/vtt/ && /app/ { split($2, a, ":"); print a[2] }')
@@ -586,7 +668,7 @@ case "$1" in
                               echo " $count) $VER"
                               ((count++))
                         done
-                        read -p " Version to build?: " OPT
+                        OPT=$(prompt_user_choice " Version to build?: " $word_count)
                   else 
                         # If only one is available auto-build kicks in.
                         OPT=1
@@ -601,10 +683,8 @@ case "$1" in
                               if [ -z "${matching_images}" ]; then
                                     echo "Image 'foundryvtt:${BUILD_VER}' not found, building."
                               else
-                                    read -p "Are you sure you want to rebuild image 'foundryvtt:${BUILD_VER}'? (y/n): " confirmation
-
-                                    # Only stop containers if the version being built is the same as the running version
-                                    if [[ "${confirmation}" == "y" || "${confirmation}" == "Y" ]]; then
+                                    # Use prompt_user_confirm and check return code
+                                    if prompt_user_confirm "Are you sure you want to rebuild image 'foundryvtt:${BUILD_VER}'? (y/n): "; then
                                           if [[ "${BUILD_VER}" == "${RUNNING_VER}" ]]; then
                                               $0 stop
                                           fi
@@ -665,13 +745,18 @@ case "$1" in
       exit 1
       ;;
   clean)  
-        $0 stop
-        echo "Deleting FoundryVTT containers ..."
-        VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
-        VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
+        # Ask before stopping the service
+        if prompt_user_confirm "Do you want to stop the service before cleaning containers? (y/n): "; then
+            $0 stop
+            echo "Deleting FoundryVTT containers ..."
+            VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml down
+            VARS="" TAG=${TAG} FQDN=${FQDN} docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml down
+        else
+            log_warning_msg "Skipping stop. Cleaning cancelled."
+            exit 1
+        fi
         if [[ (! -z $2 && $2 == "--all") ]];then
-            read -p "Are you sure you want to delete all data? (y/n): " answer
-            if [[ $answer == "y" ]]; then
+            if prompt_user_confirm "Are you sure you want to delete all data? (y/n): "; then
                   echo "Deleting userdata docker volume ..."
                   VOLUME_NAME=$(docker volume ls --filter "name=UserData" --format "{{.Name}}")
                   if [[ -n $VOLUME_NAME ]]; then
@@ -740,14 +825,15 @@ case "$1" in
                         ((count++))
                   fi
             done
-            read -p "Version to clean/delete?: " OPT
+            # read -p "Version to clean/delete?: " OPT
+            OPT=$(prompt_user_choice "Version to clean/delete?: " $count)
 
             case ${OPT} in
                   [1-9])
                         ((OPT--))
                         DEL_VER=${list[$OPT]}
-                        read -p "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): " confirmation
-                        if [ "${confirmation}" == "y" ] || [ "${confirmation}" == "Y" ]; then
+                        # Use prompt_user_confirm and check return code
+                        if prompt_user_confirm "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): "; then
                               log_daemon_msg "Deleting zip file ..."
                               rm -f ${VTT_HOME}/downloads/*${DEL_VER}* >/dev/null 2>&1
                               log_daemon_msg "Deleting extracted folder ..."
@@ -815,7 +901,8 @@ case "$1" in
                         fi
                         ((count++))
                   done
-                  read -p "Version to set as default?: " OPT
+                  # read -p "Version to set as default?: " OPT
+                  OPT=$(prompt_user_choice "Version to set as default?: " $count)
               else 
                   OPT=1
               fi
@@ -837,17 +924,15 @@ case "$1" in
                         break
                         ;;
                   0)
-                        echo "Canceled."
-                        false
-                        log_end_msg $?
-                        break
+                        echo "Canceled. Default version was not changed."
+                        exit 0
                         ;;
                   *)
                         echo "Invalid option."
                         ;;
             esac
         done
-        exit 1     
+        exit 0     
         ;;
   diag)
             docker run \
@@ -1054,9 +1139,6 @@ case "$1" in
             fi
       done
 
-      
-
-
       if [ ! -f ${ENV_FILE} ]; then
             log_daemon_msg " - File .env does not exist, Generating ..."
             sed '/^#/d; /^$/d' "${VTT_HOME}/dotenv.example" > "${ENV_FILE}"
@@ -1128,12 +1210,11 @@ case "$1" in
                   fi
             done
             if [[ -z "$STY" && -z "$TMUX" ]]; then
-                  read -p "You are not running in screen or tmux. Do you want to continue? (y/n): " response
-                  case $response in
-                        [Yy]* ) ;;
-                        [Nn]* ) echo "Please use screen or tmux to run restore."; exit 1;;
-                        * ) echo "Invalid response. Please use screen or tmux to run restore."; exit 1;;
-                  esac
+                  # Use prompt_user_confirm and check return code
+                  if ! prompt_user_confirm "You are not running in screen or tmux. Do you want to continue? (y/n): "; then
+                        echo "Please use screen or tmux to run restore."
+                        exit 1
+                  fi
             fi
         log_begin_msg "Restoring up Foundry VTT."
         log_daemon_msg " Existing backups in ${BACKUP_HOME}"
@@ -1153,7 +1234,8 @@ case "$1" in
                   human_readable_date=$(date -d "$filedate" +"%b %d, %Y")
                   echo " $((i+1))) $version - $human_readable_date"
             done
-            read -p " Version and date to restore?: " OPT
+            # read -p " Version and date to restore?: " OPT
+            OPT=$(prompt_user_choice " Version and date to restore?: " ${#file_array[@]})
 
             # Choosing restore options, up to 9 available versions.
             case ${OPT} in
@@ -1272,16 +1354,13 @@ case "$1" in
       getWebStatus
         ;;
   *)
-        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
+        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload|help}"
+        log_failure_msg "Run '$0 help' for detailed usage and options."
         exit 1
         ;;
 esac
 
-exit
-        ;;
-esac
+exit 0
 
-exit
-
-
+exit 0
 
