@@ -603,9 +603,11 @@ case "$1" in
                               else
                                     read -p "Are you sure you want to rebuild image 'foundryvtt:${BUILD_VER}'? (y/n): " confirmation
 
-                                    # Process user's confirmation
-                                    if [[ "${confirmation}" == "y" || "${confirmation}" == "Y" ]]; then                              
-                                          $0 stop
+                                    # Only stop containers if the version being built is the same as the running version
+                                    if [[ "${confirmation}" == "y" || "${confirmation}" == "Y" ]]; then
+                                          if [[ "${BUILD_VER}" == "${RUNNING_VER}" ]]; then
+                                              $0 stop
+                                          fi
                                           # Delete matching images
                                           docker image rm ${matching_images} >/dev/null 2>&1
                                           echo "Image(s) matching '${BUILD_VER}' deleted. Re-building."
@@ -857,12 +859,12 @@ case "$1" in
       ;;
   download)
         if [[ $2 =~ ${REGEX_URL} ]]; then 
-            VERSION=$(echo "$2" | grep -oP "(?<=releases\/)\d+\.\d+")
+            # Extract version from both Linux and Node zip URLs
+            VERSION=$(echo "$2" | grep -oP "(?<=releases/)\d+\.\d+")
             MAJOR_VER="${VERSION%%.*}"
             FOUNDRY_VERSIONS="${VTT_HOME}/FoundryVTT/foundryvtt.json"
             MAJOR_MINOR=$(jq -r '.foundryvtt | map(.version | capture("(?<major>\\d+)")) | sort_by(.major | tonumber) | first | .major' ${FOUNDRY_VERSIONS})
             MAJOR_MAJOR=$(jq -r '.foundryvtt | map(.version | capture("(?<major>\\d+)")) | sort_by(.major | tonumber) | last | .major' ${FOUNDRY_VERSIONS})
-
 
             if [[ (${MAJOR_VER} -ge ${MAJOR_MINOR}) && (${MAJOR_VER} -le ${MAJOR_MAJOR}) ]]; then
                   DEST="${VTT_HOME}/FoundryVTT"
@@ -873,20 +875,16 @@ case "$1" in
                   fi
 
                   FILE=$(basename "$2" | awk -F\? {'print $1'})
-                  # Validate the URL if contains ZIP file
-                  echo $2 | grep -E "/[^/]*\.zip\?verify=" >/dev/null 2>&1;
-
-                  # Check the exit code of the previous command
-                  if [ $? -eq 0 ]; then
-                        # The file is a ZIP file, proceed with downloading
+                  # Accept both Linux and Node zip files
+                  if echo "$FILE" | grep -Eq "^FoundryVTT-(Linux|Node)-${VERSION}\.zip$"; then
                         log_daemon_msg " Downloading ZIP file ${FILE} ..."
                         curl -# -o "${VTT_HOME}/downloads/${FILE}" "$2"
                         log_daemon_msg " Download completed."
 
                         $0 extract ${VERSION}
                   else
-                        # The file is not a ZIP file or has other extensions
-                        log_failure_msg -e "\nThe file is not a ZIP file or has other extensions. Please use TIMED URL for Linux/NodeJS. Aborting download."
+                        # The file is not a recognized ZIP file
+                        log_failure_msg -e "\nThe file is not a recognized FoundryVTT Linux or NodeJS ZIP file. Please use a valid TIMED URL. Aborting download."
                   fi
             else
                   log_failure_msg "Version ${MAJOR_VER} not supported by vttctl."
@@ -899,18 +897,53 @@ case "$1" in
       VERSION=$2
       DEST="FoundryVTT"
       TARGET="${VTT_HOME}/${DEST}/${VERSION}"
-      FILE="FoundryVTT-${VERSION}.zip"
+      MAJOR_VER="${VERSION%%.*}"
+      ZIP_PATH=""
+      FILE=""
+      if [ "$MAJOR_VER" -ge 13 ]; then
+          # Try Node and Linux zips for v13+
+          for variant in Node Linux; do
+              CANDIDATE="${VTT_HOME}/downloads/FoundryVTT-${variant}-${VERSION}.zip"
+              if [ -e "$CANDIDATE" ]; then
+                  ZIP_PATH="$CANDIDATE"
+                  FILE="FoundryVTT-${variant}-${VERSION}.zip"
+                  break
+              fi
+          done
+      else
+          # v12 and below: FoundryVTT-<version>.zip
+          CANDIDATE="${VTT_HOME}/downloads/FoundryVTT-${VERSION}.zip"
+          if [ -e "$CANDIDATE" ]; then
+              ZIP_PATH="$CANDIDATE"
+              FILE="FoundryVTT-${VERSION}.zip"
+          fi
+      fi
       rm -rf ${TARGET} >/dev/null 2>&1;
-      log_daemon_msg "Extracting ${FILE}"
+      log_daemon_msg "Extracting ${FILE:-FoundryVTT-<version>.zip}"
       log_daemon_msg " Destination ${TARGET}/"
-      ZIP_PATH=${VTT_HOME}/downloads/${FILE}
-      if [ -e $ZIP_PATH ]; then
-            unzip -qq -o $ZIP_PATH -d ${TARGET}/
-            VER=$(cat ${TARGET}/resources/app/package.json | jq -r '"\(.release.generation).\(.release.build)"')
+      if [ -n "$ZIP_PATH" ]; then
+            unzip -qq -o "$ZIP_PATH" -d ${TARGET}/
+            # Determine where package.json is located
+            PKG_JSON=""
+            if [ "$MAJOR_VER" -ge 13 ]; then
+                # Node: root, Linux: resources/app/
+                if [ -f "${TARGET}/package.json" ]; then
+                    PKG_JSON="${TARGET}/package.json"
+                else
+                    PKG_JSON="${TARGET}/resources/app/package.json"
+                fi
+            else
+                PKG_JSON="${TARGET}/resources/app/package.json"
+            fi
+            if [ -f "$PKG_JSON" ]; then
+                VER=$(cat "$PKG_JSON" | jq -r '"\(.release.generation).\(.release.build)"')
+            else
+                VER="unknown"
+            fi
             cp ${VTT_HOME}/${DEST}/*.sh ${TARGET}
             log_daemon_msg " ${FILE} contents extracted and ready to build."
       else
-            log_failure_msg "${FILE} does not exists in downloads, please download the ZIP form foundryvtt.com."
+            log_failure_msg "No FoundryVTT zip for version ${VERSION} exists in downloads, please download the ZIP from foundryvtt.com."
       fi
       ;;
   fix)
@@ -1241,6 +1274,10 @@ case "$1" in
   *)
         log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload}"
         exit 1
+        ;;
+esac
+
+exit
         ;;
 esac
 

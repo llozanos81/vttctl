@@ -16,9 +16,9 @@
         "alpine": "3.18"
       },
       {
-        "version": "12.xxx",
-        "nodejs": "20.x.x",
-        "alpine": "3.20"
+        "version": "13.xxx",
+        "nodejs": "22.x.x",
+        "alpine": "3.22"
       }
     ]
   }

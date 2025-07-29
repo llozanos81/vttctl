@@ -23,5 +23,16 @@ fi
 cd /home/foundry/vtt/
 export USER=$(whoami)
 echo " - Running FoundryVTT as $USER"
+
+# Detect main file path
+if [ -f resources/app/main.js ]; then
+    MAIN_PATH="resources/app/main.js"
+elif [ -f main.js ]; then
+    MAIN_PATH="main.js"
+else
+    echo "Error: Could not find FoundryVTT main.js entrypoint."
+    exit 1
+fi
+
 echo " - Running pm2 app foundry ..."
-pm2-runtime start --env production --name foundry resources/app/main.js -- --dataPath=/home/foundry/userdata --noupnp=${UPNP} --port=30000
+pm2-runtime start --env production --name foundry $MAIN_PATH -- --dataPath=/home/foundry/userdata --noupnp=${UPNP} --port=30000
