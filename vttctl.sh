@@ -401,19 +401,19 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1 || type "$1" >/dev/null 2>&1
 }
 
-# Reusable function: print a numbered list from a space-separated string
-print_numbered_list() {
-    local items=($1)
+# Reusable function: print a numbered list from an array
+print_numbered_array() {
+    local -n arr=$1
     local default="$2"
-    local count=1
-    for item in "${items[@]}"; do
-        if [[ "$item" == "$default" ]]; then
-            echo -e " $count) ${green}${item}${reset}"
+    for i in "${!arr[@]}"; do
+        idx=$((i+1))
+        if [[ "${arr[$i]}" == "$default" ]]; then
+            echo -e " $idx) ${green}${arr[$i]}${reset}"
         else
-            echo " $count) $item"
+            echo " $idx) ${arr[$i]}"
         fi
-        ((count++))
     done
+    echo " 0) Cancel"
 }
 
 # Reusable function: prompt for a version selection from a list
@@ -675,73 +675,73 @@ case "$1" in
 
       if [[ (! -z $2 && $2 == "--force") || (${RUNNING_VER} == "") ]];then
             log_daemon_msg "Forced build, listing all available versions."
-            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '[0-9]{1,2}\.[0-9]{3,4}' | grep -v '^$')
+            mapfile -t VERSIONS_ARR < <(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '[0-9]{1,2}\.[0-9]{3,4}' | grep -v '^$')
       else
-            VERSIONS=$(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}")
+            mapfile -t VERSIONS_ARR < <(ls -l ${VTT_HOME}/FoundryVTT/ | grep -oE '^d.* [0-9]{1,2}\.[0-9]{3,4}$' | awk '{print $NF}' | grep -v "${RUNNING_VER}")
       fi
 
-      if [[ -z ${VERSIONS} ]]; then
+      if [[ ${#VERSIONS_ARR[@]} -eq 0 ]]; then
             log_daemon_msg " No FoundryVTT binares available, Use $0 download \"TIMED_URL\""
             log_end_msg $?
       else
-            log_daemon_msg " "${VERSIONS}" version(s) available!"
+            log_daemon_msg " ${VERSIONS_ARR[*]} version(s) available!"
             OPT=""
-            while [[ $OPT != "0" ]]; do
-                  OPT=$(prompt_version_selection "${VERSIONS}" " Version to build?: " "")
-                  # Choosing Build options, up to 9 available versions.
-                  case ${OPT} in
-                        [1-9])
-                              BUILD_VER=$(echo "${VERSIONS}" | sed -n "${OPT}p")
-                              matching_images=$(docker images | awk '{print $1":"$2}' | grep "${BUILD_VER}")
-                              if [ -z "${matching_images}" ]; then
-                                    echo "Image 'foundryvtt:${BUILD_VER}' not found, building."
-                              else
-                                    # Use prompt_user_confirm and check return code
-                                    if prompt_user_confirm "Are you sure you want to rebuild image 'foundryvtt:${BUILD_VER}'? (y/n): "; then
-                                          if [[ "${BUILD_VER}" == "${RUNNING_VER}" ]]; then
-                                              $0 stop
-                                          fi
-                                          # Delete matching images
-                                          docker image rm ${matching_images} >/dev/null 2>&1
-                                          echo "Image(s) matching '${BUILD_VER}' deleted. Re-building."
-                                    else
-                                          echo "Image building cancelled."
-                                          exit
-                                    fi
-                              fi
+            BUILD_STARTED=false
+            while true; do
+                echo "Available versions:"
+                print_numbered_array VERSIONS_ARR ""
+                read -p " Version to build?: " OPT
+                if [[ "$OPT" =~ ^[0-9]+$ ]] && (( OPT >= 0 && OPT <= ${#VERSIONS_ARR[@]} )); then
+                    if [[ "$OPT" == "0" ]]; then
+                        echo "Canceled. Build was not started."
+                        exit 0
+                    fi
+                    BUILD_VER="${VERSIONS_ARR[$((OPT-1))]}"
+                    matching_images=$(docker images | awk '{print $1":"$2}' | grep "${BUILD_VER}")
+                    if [ -z "${matching_images}" ]; then
+                        echo "Image 'foundryvtt:${BUILD_VER}' not found, building."
+                    else
+                        if prompt_user_confirm "Are you sure you want to rebuild image 'foundryvtt:${BUILD_VER}'? (y/n): "; then
+                            if [[ "${BUILD_VER}" == "${RUNNING_VER}" ]]; then
+                                $0 stop
+                            fi
+                            docker image rm ${matching_images} >/dev/null 2>&1
+                            echo "Image(s) matching '${BUILD_VER}' deleted. Re-building."
+                        else
+                            echo "Image building cancelled."
+                            exit 1
+                        fi
+                    fi
 
+                    exclude=()
+                    for EX in "${VERSIONS_ARR[@]}"; do
+                        if [[ "$EX" != "${BUILD_VER}" ]]; then
+                            exclude+=($EX)
+                        fi
+                    done
 
-                              for EX in ${VERSIONS}; do
-                                    if [[ "$EX" != "${BUILD_VER}" ]]; then
-                                          exclude+=($EX)
-                                    fi
-                              done
+                    rm ${VTT_HOME}/FoundryVTT/.dockerignore >/dev/null 2>&1
+                    echo "${exclude[@]}" > ${VTT_HOME}/FoundryVTT/.dockerignore
+                    MAJOR_VER="${BUILD_VER%%.*}"
+                    TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
 
-                              # Preparing docker build environment
-                              rm ${VTT_HOME}/FoundryVTT/.dockerignore >/dev/null 2>&1
-                              echo "${exclude[@]}" > ${VTT_HOME}/FoundryVTT/.dockerignore
-                              MAJOR_VER="${BUILD_VER%%.*}"
-                              TIMEZONE=$(timedatectl | grep "Time zone" | awk {'print $3'})
-
-                              echo "Building version: ${BUILD_VER}"
-                              cp ${VTT_HOME}/FoundryVTT/Dockerfile.${MAJOR_VER} ${VTT_HOME}/FoundryVTT/Dockerfile
-                              cp ${VTT_HOME}/FoundryVTT/docker-entrypoint.sh ${VTT_HOME}/FoundryVTT/${BUILD_VER}/
-                              docker build --progress=plain \
-                                    --build-arg BUILD_VER=${BUILD_VER} \
-                                    --build-arg TIMEZONE=${TIMEZONE} \
-                                    -t foundryvtt:${BUILD_VER} \
-                                    -f ${VTT_HOME}/FoundryVTT/Dockerfile ${VTT_HOME}/FoundryVTT
-                              break
-                              ;;
-                        0)
-                              echo "Canceled."
-                              break
-                              ;;
-                        *)
-                              echo "Invalid option."
-                              ;;
-                  esac
+                    echo "Building version: ${BUILD_VER}"
+                    cp ${VTT_HOME}/FoundryVTT/Dockerfile.${MAJOR_VER} ${VTT_HOME}/FoundryVTT/Dockerfile
+                    cp ${VTT_HOME}/FoundryVTT/docker-entrypoint.sh ${VTT_HOME}/FoundryVTT/${BUILD_VER}/
+                    docker build --progress=plain \
+                        --build-arg BUILD_VER=${BUILD_VER} \
+                        --build-arg TIMEZONE=${TIMEZONE} \
+                        -t foundryvtt:${BUILD_VER} \
+                        -f ${VTT_HOME}/FoundryVTT/Dockerfile ${VTT_HOME}/FoundryVTT
+                    BUILD_STARTED=true
+                    break
+                else
+                    echo "Invalid option."
+                fi
             done
+            if [[ "$BUILD_STARTED" == "true" ]]; then
+                log_end_msg $?
+            fi
       fi
 
       # Create frontend network if not exists
@@ -754,7 +754,8 @@ case "$1" in
             docker volume create foundryvtt_prod_UserData
       fi
 
-      log_end_msg $?
+      # Only call log_end_msg if not canceled (for legacy code path)
+      # (This is safe, as above logic will not call log_end_msg on cancel)
       exit 1
       ;;
   clean)  
@@ -872,8 +873,8 @@ case "$1" in
       exit 1
       ;;
   default)
-        if [ ! -n ${DEFAULT_VER} ]; then
-            VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
+        if [ ! -n "${DEFAULT_VER}" ]; then
+            VERSIONS=$(docker images -a | grep vtt | awk '{print $2}')
             word_count=$(echo "${VERSIONS}" | wc -w)
             if [ $word_count == 1 ]; then
                   echo ${VERSIONS}
@@ -886,38 +887,50 @@ case "$1" in
             VERSION_MSG="Default version ${DEFAULT_VER}"
         fi
         log_daemon_msg "Setting default version of Foundry VTT. (${VERSION_MSG})"
-        VERSIONS=$(docker images -a | grep vtt | awk {'print $2'})
-        if [[ -z ${VERSIONS} ]]; then
+        # Get versions as array
+        mapfile -t VERSIONS_ARR < <(docker images -a | grep vtt | awk '{print $2}')
+        if [[ ${#VERSIONS_ARR[@]} -eq 0 ]]; then
             log_failure_msg "No available built FoundryVTT images, can't set default."
             exit 1
         fi
         OPT=""
         while [[ ${OPT} != "0" ]]; do
-              OPT=$(prompt_version_selection "${VERSIONS}" "Version to set as default?: " "${DEFAULT_VER}")
-            case ${OPT} in
-                  [1-9])
-                        NEW_DEFAULT_VER=$(echo "${VERSIONS}" | sed -n "${OPT}p")
-                        USERDATA_VERSION=$($0 userdata --version)
-                        scale=1000
-                        NEW_DEFAULT_VER_SCALED=$(awk -v num="$NEW_DEFAULT_VER" -v scale="$scale" 'BEGIN{ print int(num * scale) }')
-                        USERDATA_VERSION_SCALED=$(awk -v num="$USERDATA_VERSION" -v scale="$scale" 'BEGIN{ print int(num * scale) }')
-                        if [[ ${NEW_DEFAULT_VER_SCALED} -ge ${USERDATA_VERSION_SCALED} ]]; then
-                              sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=${NEW_DEFAULT_VER}/" "${ENV_FILE}"
-                              echo "New default version is ${NEW_DEFAULT_VER}."
-                        else
-                              log_failure_msg "Current userdata version is ${USERDATA_VERSION} can't default to lower app version."
-                              log_failure_msg " - Restore v${NEW_DEFAULT_VER} userdata and then change default."
-                        fi
-                        break
-                        ;;
-                  0)
-                        echo "Canceled. Default version was not changed."
-                        exit 0
-                        ;;
-                  *)
-                        echo "Invalid option."
-                        ;;
-            esac
+            echo "Available versions:"
+            for i in "${!VERSIONS_ARR[@]}"; do
+                idx=$((i+1))
+                if [[ "${VERSIONS_ARR[$i]}" == "${DEFAULT_VER}" ]]; then
+                    echo -e " $idx) ${green}${VERSIONS_ARR[$i]}${reset}"
+                else
+                    echo " $idx) ${VERSIONS_ARR[$i]}"
+                fi
+            done
+            echo " 0) Cancel"
+            read -p "Version to set as default?: " OPT
+            if [[ "$OPT" =~ ^[0-9]+$ ]] && (( OPT >= 0 && OPT <= ${#VERSIONS_ARR[@]} )); then
+                if [[ "$OPT" == "0" ]]; then
+                    echo "Canceled. Default version was not changed."
+                    exit 0
+                fi
+                NEW_DEFAULT_VER="${VERSIONS_ARR[$((OPT-1))]}"
+                if [[ "${NEW_DEFAULT_VER}" == "${DEFAULT_VER}" ]]; then
+                    echo "Selected version is already the default. No changes made."
+                    break
+                fi
+                USERDATA_VERSION=$($0 userdata --version)
+                scale=1000
+                NEW_DEFAULT_VER_SCALED=$(awk -v num="$NEW_DEFAULT_VER" -v scale="$scale" 'BEGIN{ print int(num * scale) }')
+                USERDATA_VERSION_SCALED=$(awk -v num="$USERDATA_VERSION" -v scale="$scale" 'BEGIN{ print int(num * scale) }')
+                if [[ ${NEW_DEFAULT_VER_SCALED} -ge ${USERDATA_VERSION_SCALED} ]]; then
+                    sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=${NEW_DEFAULT_VER}/" "${ENV_FILE}"
+                    echo "New default version is ${NEW_DEFAULT_VER}."
+                else
+                    log_failure_msg "Current userdata version is ${USERDATA_VERSION} can't default to lower app version."
+                    log_failure_msg " - Restore v${NEW_DEFAULT_VER} userdata and then change default."
+                fi
+                break
+            else
+                echo "Invalid option."
+            fi
         done
         exit 0     
         ;;
@@ -1337,19 +1350,6 @@ case "$1" in
       
       ;;
 
-  web)
-      getWebStatus
-        ;;
-  *)
-        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload|help}"
-        log_failure_msg "Run '$0 help' for detailed usage and options."
-        exit 1
-        ;;
-esac
-
-exit 0
-
-exit 0
   web)
       getWebStatus
         ;;
