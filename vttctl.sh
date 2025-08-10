@@ -16,7 +16,7 @@ ENV_FILE="${VTT_HOME}/.env"
 # Source helper scripts
 source "${VTT_HOME}/src/logging.sh"
 source "${VTT_HOME}/src/docker_helpers.sh"
-# Future: source "${VTT_HOME}/src/workflow_backup.sh"
+source "${VTT_HOME}/src/workflow_backup.sh"
 # Future: source "${VTT_HOME}/src/workflow_build.sh"
 # Future: source "${VTT_HOME}/src/workflow_restore.sh"
 
@@ -58,53 +58,7 @@ parse_version() {
     echo "$version|$date"
 }
 
-# Use portable shell constructs for file listing and avoid parsing ls output
-function generateBackupListing() {
-    BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
-
-    case "${MAJOR_VER}" in
-        9|10) TEMPLATE_VER=9 ;;
-        11|12) TEMPLATE_VER=11 ;;
-    esac
-
-    BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
-    BACKUP_FILE_TABLE=""
-
-    shopt -s nullglob
-    for file in "${VTT_HOME}/backups/FoundryVTT/"*.tar*; do
-        [ -f "$file" ] || continue
-        filename=$(basename "$file")
-        IFS="|" read -r version raw_date <<< "$(parse_version "$filename")"
-        date=""
-        if [ -n "$raw_date" ]; then
-            date=$(date -d "$raw_date" +'%Y-%m-%d' 2>/dev/null || echo "$raw_date")
-        fi
-        size=$(stat -c "%s" "$file" 2>/dev/null || stat -f "%z" "$file")
-        size_human=$(du -h "$file" | awk '{print $1}')
-        md5=$(md5sum "$file" 2>/dev/null | awk '{print $1}')
-        BACKUP_FILE_TABLE="${BACKUP_FILE_TABLE}<tr>
-        <td><a href='${filename}'>${filename}</a></td>
-        <td>${version}</td>
-        <td>${date}</td>
-        <td>${size_human}</td>
-        <td>${md5}</td>
-        </tr>"
-    done
-    shopt -u nullglob
-
-    VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
-
-    awk -v refresh="${BACKUP_REFRESH}" \
-        -v file_table="${BACKUP_FILE_TABLE}" \
-        -v version="${VTTCTL_VERSION}" '
-    {
-        gsub("{{BACKUP_REFRESH}}", refresh);
-        gsub("{{BACKUP_FILE_TABLE}}", file_table);
-        gsub("{{VTTCTL_VERSION}}", version);
-        print;
-    }
-    ' "${BACKUP_TEMPLATE}" > "${BACKUP_INDEX}"
-}
+# Remove the local definition of generateBackupListing
 
 function progressCursor() {
             i=1
@@ -313,6 +267,7 @@ function isPlatformSupported() {
 
       platform="$1 $2 $3"
       supported=(
+            "Ubuntu 24.04 aarch64"
             "Ubuntu 22.04 aarch64"
             "Ubuntu 22.04 x86_64"
             "Ubuntu 20.04 x86_64"
@@ -608,7 +563,6 @@ case "$1" in
         ;;
   backup)
         IS_RUNNING=$($0 status --json=true | jq -r .running)
-
         WORLD=$($0 status --json=true | jq -r .world)
 
         if [[ ${WORLD} == "inactive" ]]; then
@@ -620,9 +574,20 @@ case "$1" in
         if [[ ${IS_RUNNING} && ! ${IS_RUNNING} == "error" && ${IS_ACTIVE} ]]; then
             RUNNING_VER=$($0 status --json=true | jq -r .version)
             MAJOR_VER="${RUNNING_VER%%.*}"
-            log_daemon_msg "Backing up Foundry VTT ${RUNNING_VER}."   
+            VTTCTL_VERSION="${VTTCTL_MAJ}.${VTTCTL_MIN} Build ${VTTCTL_BUILD}"
+            log_daemon_msg "Backing up Foundry VTT ${RUNNING_VER}."
             start_time=$(date +%s)
-            prodBackup
+            create_backup \
+                "${RUNNING_VER}" \
+                "${BACKUP_HOME}" \
+                "${UID}" \
+                "${GID}" \
+                "${WEB_PROTO}" \
+                "${FQDN}" \
+                "${VTT_HOME}" \
+                "${MAJOR_VER}" \
+                "${BACKUP_REFRESH}" \
+                "${VTTCTL_VERSION}"
             end_time=$(date +%s)
             duration=$((end_time - start_time))
 
@@ -639,7 +604,6 @@ case "$1" in
             if [ ! -z ${hours} ]; then
                   ELAPSED_TIME="${hours}:"
             fi
-            # Format minutes and seconds with leading zeros if below 10
             minutes_formatted=$(printf "%02d" "${minutes}")
             seconds_formatted=$(printf "%02d" "${seconds}")
 
@@ -659,9 +623,9 @@ case "$1" in
             sleep 1
             $0 backup
         fi
-        
+
         log_end_msg $?
-        exit 1 
+        exit 1
         ;;
   build)
       log_daemon_msg "Building ${DESC}" "${NAME}"
@@ -1361,6 +1325,3 @@ case "$1" in
 esac
 
 exit 0
-
-exit 0
-
