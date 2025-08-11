@@ -371,18 +371,22 @@ print_numbered_array() {
     echo " 0) Cancel"
 }
 
-# Reusable function: prompt for a version selection from a list
-prompt_version_selection() {
-    local versions="$1"
-    local prompt="$2"
-    local default="$3"
-    local word_count=$(echo "${versions}" | wc -w)
-    if [[ $word_count -gt 1 ]]; then
-        print_numbered_list "${versions}" "${default}"
-        prompt_user_choice "$prompt" $word_count
-    else
-        echo 1
-    fi
+# Helper function for cleanup numbered list
+print_numbered_list() {
+    local items="$1"
+    local default="$2"
+    local arr=()
+    # Convert items to array
+    read -ra arr <<< "$items"
+    for i in "${!arr[@]}"; do
+        idx=$((i+1))
+        if [[ "${arr[$i]}" == "$default" ]]; then
+            echo -e " $idx) ${green}${arr[$i]}${reset}"
+        else
+            echo " $idx) ${arr[$i]}"
+        fi
+    done
+    echo " 0) Cancel"
 }
 
 # Validate if environment is setted up
@@ -783,25 +787,31 @@ case "$1" in
             exit 1
       fi
 
+      # Convert BIGGEST (paths) to an array of version strings
+      version_list=()
+      for entry in $BIGGEST; do
+          version_list+=("$(basename "$entry")")
+      done
+
       pattern="[0-9]{1,3}\.[0-9]{1,3}"
 
-      count=1
+      count=${#version_list[@]}
       DEFAULT_VER=${DEFAULT_VER:-null}
       if [[ ${DEFAULT_VER} == "null" ]]; then
             echo "Default version is not set"
       else
             echo "Default version ${DEFAULT_VER}"            
       fi
+      OPT=""
       while [[ ${OPT} != "0" ]]; do
-            list=()
             echo "Choose version to clean/delete ('0' to cancel):"
-            print_numbered_list "${BIGGEST}" "${DEFAULT_VER}"
+            print_numbered_list "${version_list[*]}" "${DEFAULT_VER}"
             OPT=$(prompt_user_choice "Version to clean/delete?: " $count)
 
             case ${OPT} in
                   [1-9])
                         ((OPT--))
-                        DEL_VER=${list[$OPT]}
+                        DEL_VER=${version_list[$OPT]}
                         # Use prompt_user_confirm and check return code
                         if prompt_user_confirm "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): "; then
                               log_daemon_msg "Deleting zip file ..."
