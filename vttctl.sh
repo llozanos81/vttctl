@@ -122,7 +122,11 @@ function prodBackup()  {
             echo "}" >> "${METADATA_FILE}"
 
             log_daemon_msg "   - ${BACKUP_FILE} backup file created."
-            generateBackupListing
+
+            # Rebuild metadata and listing, include md5 when creating backup
+            rebuild_metadata "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}" "true"
+            log_daemon_msg "   - metadata.json and backup listing updated."
+
             log_daemon_msg "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
         fi
     fi
@@ -368,7 +372,7 @@ print_numbered_array() {
             echo " $idx) ${arr[$i]}"
         fi
     done
-    echo " 0) Cancel"
+    printf " %2d) Cancel\n" 0
 }
 
 # Helper function for cleanup numbered list
@@ -386,7 +390,7 @@ print_numbered_list() {
             echo " $idx) ${arr[$i]}"
         fi
     done
-    echo " 0) Cancel"
+    printf " %2d) Cancel\n" 0
 }
 
 # Validate if environment is setted up
@@ -566,6 +570,14 @@ case "$1" in
         exit 1
         ;;
   backup)
+        # Do not allow starting backups unless running inside tmux or screen.
+        # This prevents accidental interactive restores/backups that may require
+        # a persistent session.
+        if [[ -z "${STY:-}" && -z "${TMUX:-}" ]]; then
+            log_failure_msg "Backups must be run inside tmux or screen. Aborting."
+            exit 1
+        fi
+
         IS_RUNNING=$($0 status --json=true | jq -r .running)
         WORLD=$($0 status --json=true | jq -r .world)
 
@@ -754,87 +766,219 @@ case "$1" in
         exit 1
         ;;
   cleanup)
-      if [[ (! -z $2 && $2 == "--all") ]];then
-            DEFAULT_VER=""
-      fi
-      DIR_VERSIONS=$(ls -ld ${VTT_HOME}/FoundryVTT/*[0-9]* | awk '/^d/ {print $NF}')
-      IMG_VERSIONS=$(docker images -a | grep vtt | awk {'print $1":"$2'})
-      BIN_VERSIONS=$(ls ${VTT_HOME}/downloads/ | grep -E '[0-9]{2,3}\.[0-9]{2,3}')
+      # Support explicit flags --versions and --backups
+      MODE=""    # "versions" or "backups"
+      VALUE=""   # optional value following the flag or after '='
 
-      declare -A word_counts
-
-      # Loop through each variable
-      for var_name in DIR_VERSIONS IMG_VERSIONS BIN_VERSIONS; do
-            var_value=${!var_name}  # Get the value of the variable using indirect expansion
-            word_count=$(echo "${var_value}" | wc -w)
-            word_counts[${var_name}]=${word_count}
-      done
-
-      # Find the variable with the maximum word count
-      max_words=0
-      max_variable=""
-      for var_name in "${!word_counts[@]}"; do
-            if (( word_counts[$var_name] > max_words )); then
-            max_words=${word_counts[$var_name]}
-            max_variable=$var_name
+      if [[ "${2:-}" == --versions* ]]; then
+            if [[ "${2}" == *=* ]]; then
+                  VALUE="${2#--versions=}"
+            else
+                  VALUE="${3:-}"
             fi
-      done
+            MODE="versions"
+      elif [[ "${2:-}" == --backups* ]]; then
+            if [[ "${2}" == *=* ]]; then
+                  VALUE="${2#--backups=}"
+            else
+                  VALUE="${3:-}"
+            fi
+            MODE="backups"
+      fi
 
-      if [[ -n $max_variable ]]; then
-            BIGGEST=${!max_variable}
-      else
-            echo "Nothing to cleanup."
+      # If no explicit flag, ask user which target to cleanup
+      if [[ -z "${MODE}" ]]; then
+            echo "Choose cleanup target:"
+            echo " 1) versions"
+            echo " 2) backups"
+            echo " 0) Cancel"
+            choice=$(prompt_user_choice "Target to cleanup?: " 2)
+            case "${choice}" in
+                  1) MODE="versions" ;;
+                  2) MODE="backups" ;;
+                  0) log_failure_msg "Cleaning cancelled."; false; log_end_msg; exit 1 ;;
+            esac
+      fi
+
+      # --- Cleanup: versions ---
+      if [[ "${MODE}" == "versions" ]]; then
+            # Build candidate lists
+            DIR_VERSIONS=$(ls -ld "${VTT_HOME}/FoundryVTT/"*[0-9]* 2>/dev/null | awk '/^d/ {print $NF}' || true)
+            IMG_VERSIONS=$(docker images -a | grep vtt | awk '{print $1":"$2}' 2>/dev/null | awk -F: '{print $2}' || true)
+            BIN_VERSIONS=$(ls "${VTT_HOME}/downloads/" 2>/dev/null | grep -E '[0-9]{1,3}\.[0-9]{1,3}' || true)
+
+            declare -A counts
+            counts[DIR_VERSIONS]=$(echo "${DIR_VERSIONS}" | wc -w)
+            counts[IMG_VERSIONS]=$(echo "${IMG_VERSIONS}" | wc -w)
+            counts[BIN_VERSIONS]=$(echo "${BIN_VERSIONS}" | wc -w)
+
+            max=0; maxvar=""
+            for k in "${!counts[@]}"; do
+                  if (( counts[$k] > max )); then
+                        max=${counts[$k]}
+                        maxvar=$k
+                  fi
+            done
+
+            if [[ -n "${maxvar}" && ${max} -gt 0 ]]; then
+                  BIGGEST="${!maxvar}"
+            else
+                  echo "Nothing to cleanup."
+                  exit 1
+            fi
+
+            # Convert to array of version strings
+            version_list=()
+            for entry in ${BIGGEST}; do
+                version_list+=("$(basename "$entry")")
+            done
+
+            pattern="^[0-9]{1,3}\.[0-9]{1,3}$"
+            DEFAULT_VER=${DEFAULT_VER:-null}
+
+            # Non-interactive if VALUE provided: delete specified version
+            if [[ -n "${VALUE}" ]]; then
+                  DEL_VER="${VALUE}"
+                  if ! [[ "${DEL_VER}" =~ ${pattern} ]]; then
+                        log_failure_msg "Invalid version format: ${DEL_VER}"
+                        exit 1
+                  fi
+                  if prompt_user_confirm "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): "; then
+                        log_daemon_msg "Deleting zip file ..."
+                        rm -f -- "${VTT_HOME}/downloads/"*${DEL_VER}* >/dev/null 2>&1 || true
+                        log_daemon_msg "Deleting extracted folder ..."
+                        rm -rf -- "${VTT_HOME}/FoundryVTT/${DEL_VER}/" >/dev/null 2>&1 || true
+                        log_daemon_msg "Deleting Docker image ..."
+                        docker image rm "foundryvtt:${DEL_VER}" >/dev/null 2>&1 || true
+                        log_daemon_msg "Cleaning completed."
+                        exit 0
+                  else
+                        log_failure_msg "Operation cancelled."
+                        exit 1
+                  fi
+            fi
+
+            # Interactive selection (fallback)
+            count=${#version_list[@]}
+            OPT=""
+            while [[ ${OPT} != "0" ]]; do
+                  echo "Choose version to clean/delete ('0' to cancel):"
+                  print_numbered_list "${version_list[*]}" "${DEFAULT_VER}"
+                  OPT=$(prompt_user_choice "Version to clean/delete?: " $count)
+
+                  case ${OPT} in
+                        [1-9]*)
+                              ((OPT--))
+                              DEL_VER=${version_list[$OPT]}
+                              if prompt_user_confirm "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): "; then
+                                    log_daemon_msg "Deleting zip file ..."
+                                    rm -f -- "${VTT_HOME}/downloads/"*${DEL_VER}* >/dev/null 2>&1 || true
+                                    log_daemon_msg "Deleting extracted folder ..."
+                                    rm -rf -- "${VTT_HOME}/FoundryVTT/${DEL_VER}/" >/dev/null 2>&1 || true
+                                    log_daemon_msg "Deleting Docker image ..."
+                                    docker image rm "foundryvtt:${DEL_VER}" >/dev/null 2>&1 || true
+                                    log_daemon_msg "Cleaning completed."
+                              fi
+                              break
+                              ;;
+                        0)
+                              log_failure_msg "Cleaning cancelled."
+                              false
+                              log_end_msg
+                              break
+                              ;;
+                        *)
+                              echo "Invalid option."
+                              ;;
+                  esac
+            done
+
             exit 1
       fi
 
-      # Convert BIGGEST (paths) to an array of version strings
-      version_list=()
-      for entry in $BIGGEST; do
-          version_list+=("$(basename "$entry")")
-      done
+      # --- Cleanup: backups ---
+      if [[ "${MODE}" == "backups" ]]; then
+            mapfile -t BACKUP_FILES < <(ls -1 "${BACKUP_HOME}"*.tar "${BACKUP_HOME}"*.tar.gz "${BACKUP_HOME}"*.tar.bz2 2>/dev/null || true)
 
-      pattern="[0-9]{1,3}\.[0-9]{1,3}"
+            if [[ ${#BACKUP_FILES[@]} -eq 0 ]]; then
+                  echo "No backup files found in ${BACKUP_HOME}"
+                  exit 1
+            fi
 
-      count=${#version_list[@]}
-      DEFAULT_VER=${DEFAULT_VER:-null}
-      if [[ ${DEFAULT_VER} == "null" ]]; then
-            echo "Default version is not set"
-      else
-            echo "Default version ${DEFAULT_VER}"            
-      fi
-      OPT=""
-      while [[ ${OPT} != "0" ]]; do
-            echo "Choose version to clean/delete ('0' to cancel):"
-            print_numbered_list "${version_list[*]}" "${DEFAULT_VER}"
-            OPT=$(prompt_user_choice "Version to clean/delete?: " $count)
+            # Non-interactive if VALUE provided -> treat as filename or basename
+            if [[ -n "${VALUE}" ]]; then
+                  TARGET_FILE="${VALUE}"
+                  if [[ -f "${TARGET_FILE}" ]]; then
+                        FILEPATH="${TARGET_FILE}"
+                        BASENAME=$(basename "${TARGET_FILE}")
+                  else
+                        FILEPATH="${BACKUP_HOME}${TARGET_FILE}"
+                        BASENAME="${TARGET_FILE}"
+                  fi
 
-            case ${OPT} in
-                  [1-9])
-                        ((OPT--))
-                        DEL_VER=${version_list[$OPT]}
-                        # Use prompt_user_confirm and check return code
-                        if prompt_user_confirm "Are you sure you want to remove all v${DEL_VER} related assets? (y/n): "; then
-                              log_daemon_msg "Deleting zip file ..."
-                              rm -f ${VTT_HOME}/downloads/*${DEL_VER}* >/dev/null 2>&1
-                              log_daemon_msg "Deleting extracted folder ..."
-                              rm -rf ${VTT_HOME}/FoundryVTT/${DEL_VER}/ >/dev/null 2>&1
-                              log_daemon_msg "Deleting Docker image ..."
-                              docker image rm foundryvtt:${DEL_VER} >/dev/null 2>&1
-                              log_daemon_msg "Cleaning completed."
+                  if [[ -f "${FILEPATH}" ]]; then
+                        if prompt_user_confirm "Delete backup ${BASENAME}? (y/n): "; then
+                              rm -f -- "${FILEPATH}"
+                              
+                              # rebuild metadata.json and index.html after deletion (no md5)
+                              IFS="|" read -r parsed_ver parsed_date <<< "$(parse_version "${BASENAME}")"
+                              MAJOR_VER="${parsed_ver%%.*}"
+                              MAJOR_VER=${MAJOR_VER:-13}
+                              VTTCTL_VERSION="${VTTCTL_MAJ:-}.${VTTCTL_MIN:-} Build ${VTTCTL_BUILD:-}"
+                              if rebuild_metadata "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}" "false"; then
+                                    log_daemon_msg "Backup '${BASENAME}' deleted and listing updated."
+                                    exit 0
+                              else
+                                    log_failure_msg "Backup '${BASENAME}' deleted but failed to update listing (see logs)."
+                                    exit 1
+                              fi
+                        else
+                              log_failure_msg "Operation cancelled."
+                              exit 1
                         fi
-                        break
-                        ;;
-                  0)
-                        log_failure_msg "Cleaning cancelled."
-                        false
-                        log_end_msg
-                        break
-                        ;;
-                  *)
-                        echo "Invalid option."
-                        ;;
-            esac
-      done
+                  else
+                        log_failure_msg "Backup file not found: ${TARGET_FILE}"
+                        exit 1
+                  fi
+            fi
+
+            # Interactive listing and deletion
+            echo "Choose backup to delete ('0' to cancel):"
+            for i in "${!BACKUP_FILES[@]}"; do
+                  idx=$((i+1))
+                  printf " %2d) %s\n" "${idx}" "$(basename "${BACKUP_FILES[$i]}")"
+            done
+            printf " %2d) Cancel\n" 0
+
+            CHOICE=$(prompt_user_choice "Backup to delete?: " $(( ${#BACKUP_FILES[@]} )))
+            if [[ "${CHOICE}" == "0" ]]; then
+                  log_failure_msg "Cleaning cancelled."
+                  exit 1
+            fi
+            ((CHOICE--))
+            DEL_PATH="${BACKUP_FILES[$CHOICE]}"
+            DEL_NAME=$(basename "${DEL_PATH}")
+            if prompt_user_confirm "Are you sure you want to delete backup ${DEL_NAME}? (y/n): "; then
+                  rm -f -- "${DEL_PATH}" >/dev/null 2>&1 || true
+                  
+                  # rebuild metadata.json and index.html after deletion (no md5)
+                  IFS="|" read -r parsed_ver parsed_date <<< "$(parse_version "${DEL_NAME}")"
+                  MAJOR_VER="${parsed_ver%%.*}"
+                  MAJOR_VER=${MAJOR_VER:-13}
+                  VTTCTL_VERSION="${VTTCTL_MAJ:-}.${VTTCTL_MIN:-} Build ${VTTCTL_BUILD:-}"
+                  if rebuild_metadata "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}" "false"; then
+                        log_daemon_msg "Backup '${DEL_NAME}' deleted and listing updated."
+                  else
+                        log_failure_msg "Backup '${DEL_NAME}' deleted but failed to update listing (see logs)."
+                        exit 1
+                  fi
+            else
+                  log_failure_msg "Operation cancelled."
+                  exit 1
+            fi
+            exit 0
+      fi
+
       exit 1
       ;;        
   userdata)
@@ -878,7 +1022,7 @@ case "$1" in
                     echo " $idx) ${VERSIONS_ARR[$i]}"
                 fi
             done
-            echo " 0) Cancel"
+            printf " %2d) Cancel\n" 0
             read -p "Version to set as default?: " OPT
             if [[ "$OPT" =~ ^[0-9]+$ ]] && (( OPT >= 0 && OPT <= ${#VERSIONS_ARR[@]} )); then
                 if [[ "$OPT" == "0" ]]; then

@@ -1,63 +1,154 @@
-# Copilot Instructions for vttctl (FoundryVTT Docker Orchestration)
+# GitHub Copilot Instructions for legendaryrealms.com.mx (vttctl FoundryVTT Docker Orchestration)
+**Copilot must always follow these rules when working in this repository.**
 
-# General Guidelines
-- Write clear, concise, and well-documented code.
-- Follow existing code style and conventions.
-- Ensure all new features are covered by tests.
-- All variables and functions should have descriptive names in English.
-- Use comments to explain complex logic or decisions in English.
+## General Principles
+- Write clear, maintainable, and secure code.
+- Prefer explicit over implicit behavior.
+- Use descriptive variable and function names in English.
+- Add comments for non-trivial logic and document assumptions.
+- Avoid unused code or features not requested.
+- Validate language, syntax, and logic before finalizing changes.
+- Ask clarifying questions if requirements are ambiguous.
+- Prefer the most secure and maintainable solution if multiple exist.
 
-# AI Instructions for chat editing text model
-- When generating or modifying code, ensure it adheres to the project's conventions and patterns.
-- Focus on clarity and maintainability.
-- When adding new features, consider how they integrate with existing workflows.
-- Think, Analyze, Plan, Implement, Test, Document each change.
-- Ask clarifying questions if requirements are ambiguous or if additional context is needed.
-- Check or validate language, syntax, and logic before finalizing changes.
+## Project-Specific Guidelines
+- Main entrypoint: `vttctl.sh` (Bash script, root of repo). All major operations are invoked via this script.
+- Docker images are versioned per FoundryVTT release (`FoundryVTT/foundryvtt.json`).
+- Compose files: `docker/docker-compose.yml` (production), `docker/docker-compose-dev.yml` (development/testing).
+- User data and backups: Docker volumes and `backups/FoundryVTT/`.
+- All FoundryVTT binaries: `FoundryVTT/<version>/`.
+- Dockerfiles: `FoundryVTT/Dockerfile.<major_version>`, symlinked/copied to `FoundryVTT/Dockerfile` before build.
+- Environment variables: `.env` (see `dotenv.example`).
+- Container user/group IDs: always `3000:3000`.
+- All Docker Compose commands must be wrapped by `vttctl.sh`.
+- Backups: `backups/FoundryVTT/`, indexed in `metadata.json`.
+- Run scripts as non-root user in the `docker` group.
+- Do not edit Docker Compose files or Dockerfiles directly for version changes; use scripts.
+- For new FoundryVTT versions, update `foundryvtt.json` and add a matching Dockerfile.
 
-## Project Overview
-- This project manages FoundryVTT deployments using Docker, supporting multiple versions and backup/restore workflows.
-- Main entrypoint: `vttctl.sh` (Bash script, root of repo). All major operations (build, start, stop, backup, restore, etc.) are invoked via this script.
-- Docker images are versioned per FoundryVTT release (see `FoundryVTT/foundryvtt.json` for supported versions and base images).
-- Docker Compose files: `docker/docker-compose.yml` (production), `docker/docker-compose-dev.yml` (development/testing).
-- User data and backups are stored in Docker volumes and the `backups/FoundryVTT/` directory.
+## Bash Guidelines
+- Prefer POSIX compliance unless Bash-only features are required.
+- Start scripts with:
+  ```bash
+  #!/usr/bin/env bash
+  set -euo pipefail
+  IFS=$'\n\t'
+  ```
+- Quote all variable expansions: `"${VAR}"`
+- Never hardcode paths; use variables or parameters.
+- Validate all user inputs before using them in commands.
+- Avoid `eval` and unsafe command substitution.
+- Use safe flags for file operations:
+  ```bash
+  rm -rf -- "${TARGET_DIR}"
+  ```
+- Use `shellcheck`-compliant syntax and suggest fixes when possible.
+- Prefer clear structure in loops and conditions.
+- Include a short usage block at the top of scripts.
 
-## Key Workflows
-- **Setup:**
-  1. Run `./vttctl.sh validate` to check dependencies and generate `.env` from `dotenv.example`.
-  2. Download FoundryVTT zip using a timed URL: `./vttctl.sh download "TIMED_URL"`.
-  3. Extract and build images: `./vttctl.sh build` (select version interactively).
-  4. Set default version: `./vttctl.sh default`.
-  5. Start services: `./vttctl.sh start`.
-- **Backups:** `./vttctl.sh backup` creates a backup tarball and updates metadata.
-- **Restore:** `./vttctl.sh restore` interactively restores from available backups.
-- **Cleaning:** `./vttctl.sh clean`/`cleanup` removes containers, images, and optionally user data.
+## Python Guidelines
+- Follow PEP 8 (style) and PEP 257 (docstrings).
+- Use type hints for all functions.
+- Default to Python 3.11+ syntax.
+- Use `pathlib` over `os.path` where possible.
+- Wrap file/network operations in try/except with specific exceptions.
+- Use f-strings for formatting.
+- Prefer list/dict comprehensions for clarity.
+- Make functions pure and testable.
+- Avoid bare `except:` clauses.
+- Use `with` statements for resource management.
+- Avoid monolithic functions — prefer smaller, focused functions.
 
-## Project Conventions & Patterns
-- All versioned FoundryVTT binaries are extracted to `FoundryVTT/<version>/`.
-- Dockerfiles are version-specific: `FoundryVTT/Dockerfile.<major_version>`.
-- The main Dockerfile is symlinked/copied to `FoundryVTT/Dockerfile` before build.
-- Environment variables are loaded from `.env` (see `dotenv.example` for required keys).
-- User and group IDs for containers are always `3000:3000` (do not change).
-- All Docker Compose commands are wrapped by `vttctl.sh` for correct env setup.
-- Backups are stored in `backups/FoundryVTT/` and indexed in `metadata.json`.
-- The script expects to be run as a non-root user in the `docker` group.
+## Documentation & Comments
+- Add docstrings to all public functions/classes.
+- Explain complex logic, assumptions, and integration points.
+- Note external patterns or sources when relevant.
 
-## Integration Points
-- FoundryVTT app runs in the `app` container, Nginx in `web`, and (optionally) ddb-proxy in `ddb`.
-- Nginx config: `docker/nginx/foundry.conf`.
-- Entrypoint for app container: `FoundryVTT/docker-entrypoint.sh` (sets up env, runs pm2, etc.).
-- Compose networks: `frontend` (external), `backend` (internal).
+## Security & Safety
+- Never expose secrets or credentials.
+- Sanitize all external inputs.
+- Avoid destructive commands unless explicitly requested.
+- Validate SSL and handle errors for network requests.
 
-## Examples
-- Build a new version: `./vttctl.sh build` (choose version interactively)
-- Restore backup: `./vttctl.sh restore` (choose backup interactively)
-- Set default version: `./vttctl.sh default`
+## Testing & Validation
+- For Python, generate unit tests using `pytest` style when requested.
+- For Bash, provide simple test cases or usage examples.
+- Ensure code runs without syntax errors before suggesting it.
 
-## Special Notes
-- Do not edit Docker Compose files or Dockerfiles directly for version changes; use the provided scripts.
-- Always use the `vttctl.sh` wrapper for all operations to ensure correct environment and permissions.
-- For new FoundryVTT versions, update `FoundryVTT/foundryvtt.json` and add a matching Dockerfile if needed.
+## Prompt-Specific Behavior
+- If unclear, ask clarifying questions in comments instead of making unsafe assumptions.
 
 ---
-For more, see `README.md` and comments in `vttctl.sh`.
+
+
+## 2. Bash Guidelines
+- **POSIX compliance first**, unless explicitly told to use Bash-only features.
+- Always start scripts with:
+  ```bash
+  #!/usr/bin/env bash
+  set -euo pipefail
+  IFS=$'\n\t'
+  ```
+- Quote all variable expansions: "${VAR}"
+- Never hardcode paths; use variables or parameters.
+- Validate all user inputs before using them in commands.
+- Avoid `eval` and unsafe command substitution.
+- When deleting or modifying files, always use safe flags:
+  ```bash
+  rm -rf -- "${TARGET_DIR}"
+  ```
+- Use `shellcheck`-compliant syntax and suggest fixes when possible.
+- If loops or conditions can be simplified, prefer clear structure over golfing.
+
+---
+
+## 3. Python Guidelines
+- Follow **PEP 8** for style and **PEP 257** for docstrings.
+- Use **type hints** for all functions:
+  ```python
+  def process_data(data: list[str]) -> list[str]:
+      """Process input data and return a cleaned list."""
+  ```
+- Default to **Python 3.11+** syntax.
+- Always use `pathlib` instead of `os.path` where possible.
+- Wrap file and network operations in `try/except` with specific exceptions.
+- Use f-strings for string formatting.
+- Prefer list/dict comprehensions over manual loops when it improves clarity.
+- Make functions pure and testable where possible.
+- Avoid bare `except:` clauses — catch specific errors.
+- Use `with` statements for resource management.
+
+---
+
+## 4. Documentation & Comments
+- Add **docstrings** to all public functions/classes.
+- For Bash, include a short usage block at the top of the script.
+- Explain assumptions and non-obvious logic.
+- If Copilot generates code from an external pattern, note its purpose.
+
+---
+
+## 5. Security & Safety
+- Never expose secrets or credentials in code.
+- Sanitize all external inputs before use.
+- Do not generate commands that can cause destructive changes unless explicitly requested.
+- For network requests, validate SSL and handle errors.
+
+---
+
+## 6. Testing & Validation
+- For Python, generate unit tests using `pytest` style when requested.
+- For Bash, provide simple test cases or usage examples.
+- Ensure generated code runs without syntax errors before suggesting it.
+
+---
+
+## 7. Prompt-Specific Behavior
+When unclear, **ask clarifying questions in comments** instead of making unsafe assumptions.  
+If multiple solutions exist, generate the **most secure and maintainable** one.
+Analyze, Think, reason, and clarify requirements before implementing solutions.
+
+
+---
+
+**Copilot must always follow these rules when working in this repository.**

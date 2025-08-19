@@ -19,6 +19,7 @@ generateBackupListing() {
     local BACKUP_DIR="${4}"
     local BACKUP_REFRESH="${5}"
     local VTTCTL_VERSION="${6}"
+    local COMPUTE_MD5="${7:-true}"   # new: "true" or "false"
 
     # Fallback to current directory if VTT_HOME is empty
     if [[ -z "${VTT_HOME}" ]]; then
@@ -41,9 +42,6 @@ generateBackupListing() {
     local BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
     local BACKUP_FILE_TABLE=""
 
-    # Debug log for template path
-    log_daemon_msg "Looking for backup template at: ${BACKUP_TEMPLATE}"
-
     # Verifica que el template existe antes de usarlo
     if [[ ! -f "${BACKUP_TEMPLATE}" ]]; then
         log_failure_msg "Backup template not found: ${BACKUP_TEMPLATE}"
@@ -61,7 +59,10 @@ generateBackupListing() {
         fi
         size=$(stat -c "%s" "$file" 2>/dev/null || stat -f "%z" "$file")
         size_human=$(du -h "$file" | awk '{print $1}')
-        md5=$(md5sum "$file" 2>/dev/null | awk '{print $1}')
+        md5=""
+        if [[ "${COMPUTE_MD5}" == "true" ]]; then
+            md5=$(md5sum "$file" 2>/dev/null | awk '{print $1}')
+        fi
         BACKUP_FILE_TABLE="${BACKUP_FILE_TABLE}<tr>
         <td><a href='${filename}'>${filename}</a></td>
         <td>${version}</td>
@@ -105,6 +106,13 @@ create_backup()  {
     local BACKUP_REFRESH="$9"
     local VTTCTL_VERSION="${10}"
 
+    # Ensure backups are run inside a persistent session (tmux or screen).
+    # Defensive check in case create_backup is called directly.
+    if [[ -z "${STY:-}" && -z "${TMUX:-}" ]]; then
+        log_failure_msg "Backups must be run inside tmux or screen. Aborting."
+        return 1
+    fi
+
     local METADATA_FILE="${BACKUP_HOME}metadata.json"
     
     if [[ -z "${PROD_VER}" ]]; then
@@ -132,19 +140,42 @@ create_backup()  {
 
     log_daemon_msg "   - ${BACKUP_FILE} backup file created."
 
-    log_daemon_msg "   - Updating metadata.json..."
-    if [[ -f "${METADATA_FILE}" ]]; then
-        rm "${METADATA_FILE}"
+    # Delegate metadata rebuild + index generation to a dedicated function
+    rebuild_metadata "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}"
+
+    log_daemon_msg "   - Backup listing page updated."
+    log_daemon_msg "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
+}
+
+# New function: rebuild metadata.json and regenerate index.html
+rebuild_metadata() {
+    local BACKUP_HOME="${1:-}"
+    local WEB_PROTO="${2:-http}"
+    local FQDN="${3:-localhost}"
+    local VTT_HOME="${4:-$(pwd)}"
+    local MAJOR_VER="${5:-13}"
+    local BACKUP_REFRESH="${6:-300000}"
+    local VTTCTL_VERSION="${7:-}"
+    local COMPUTE_MD5="${8:-false}"   # new, default false for deletions
+
+    local METADATA_FILE="${BACKUP_HOME}metadata.json"
+    local BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
+
+    # Safety checks
+    if [[ -z "${BACKUP_HOME}" ]]; then
+        log_failure_msg "rebuild_metadata: BACKUP_HOME is empty"
+        return 1
     fi
 
     shopt -s nullglob
     echo "{" > "${METADATA_FILE}"
     local first_file=true
+
     for filename in "${BACKUP_HOME}"*.tar "${BACKUP_HOME}"*.tar.gz "${BACKUP_HOME}"*.tar.bz2; do
         if [[ -f "${filename}" ]]; then
             basefile=$(basename "${filename}")
             IFS="|" read -r version date <<< "$(parse_version "$basefile")"
-            size=$(stat -c "%s" "${filename}")
+            size=$(stat -c "%s" "${filename}" 2>/dev/null || stat -f "%z" "${filename}")
             size_mb=$(awk -v size="${size}" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')
             if [[ "${first_file}" == false ]]; then
                 echo "," >> "${METADATA_FILE}"
@@ -155,11 +186,34 @@ create_backup()  {
         fi
     done
     echo "}" >> "${METADATA_FILE}"
-    log_daemon_msg "   - metadata.json updated."
+    shopt -u nullglob
 
-    log_daemon_msg "   - Generating backup listing page..."
-    local BACKUP_INDEX="${VTT_HOME}/backups/FoundryVTT/index.html"
-    generateBackupListing "${BACKUP_INDEX}" "${MAJOR_VER}" "${VTT_HOME}" "${BACKUP_HOME}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}"
-    log_daemon_msg "   - Backup listing page updated."
-    log_daemon_msg "   - Download it from ${WEB_PROTO}://${FQDN}/backups/"
+    # Regenerate HTML listing (uses generateBackupListing defined in same file)
+    # Choose timeout according to whether we compute md5 (md5 may be slow)
+    if [[ "${COMPUTE_MD5}" == "true" ]]; then
+        timeout_seconds=120
+    else
+        timeout_seconds=10
+    fi
+
+    generateBackupListing "${BACKUP_INDEX}" "${MAJOR_VER}" "${VTT_HOME}" "${BACKUP_HOME}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}" "${COMPUTE_MD5}" &
+    gb_pid=$!
+    # wait up to timeout_seconds for background job to finish
+    for i in $(seq 1 "${timeout_seconds}"); do
+        if ! kill -0 "${gb_pid}" 2>/dev/null; then
+            # finished
+            break
+        fi
+        sleep 1
+    done
+    if kill -0 "${gb_pid}" 2>/dev/null; then
+        # still running -> kill and report
+        kill "${gb_pid}" 2>/dev/null || true
+        wait "${gb_pid}" 2>/dev/null || true
+        log_failure_msg "generateBackupListing did not finish within ${timeout_seconds}s and was terminated."
+        return 1
+    fi
+}
+        return 1
+    fi
 }
