@@ -15,3 +15,7 @@ DEFAULT_VER=
 
 # Default Timezone
 TIMEZONE=UTC
+
+# FoundryVTT user UID and GID (default 3000:3000)
+FOUNDRY_UID=3000
+FOUNDRY_GID=3000

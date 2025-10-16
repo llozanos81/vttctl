@@ -1,15 +1,7 @@
 #!/bin/bash
 
-# Centralized version parsing function
-parse_version() {
-    # Usage: parse_version <filename>
-    # Outputs: version, date
-    local filename="$1"
-    local version date
-    version=$(echo "$filename" | grep -oP '\d+\.\d{3}')
-    date=$(echo "$filename" | grep -oP '(?<=-)(2\d{7})(?=\.)')
-    echo "$version|$date"
-}
+# Source common functions
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 # Use portable shell constructs for file listing and avoid parsing ls output
 generateBackupListing() {
@@ -32,21 +24,8 @@ generateBackupListing() {
         log_daemon_msg "No BACKUP_INDEX provided, using default: ${BACKUP_INDEX}"
     fi
 
-    local TEMPLATE_VER=""
-    case "${MAJOR_VER}" in
-        9|10) TEMPLATE_VER=9 ;;
-        11|12) TEMPLATE_VER=11 ;;
-        *) TEMPLATE_VER=13 ;;
-    esac
-
-    local BACKUP_TEMPLATE="${VTT_HOME}/FoundryVTT/templates/backups.${TEMPLATE_VER}.hbs"
-    local BACKUP_FILE_TABLE=""
-
-    # Verifica que el template existe antes de usarlo
-    if [[ ! -f "${BACKUP_TEMPLATE}" ]]; then
-        log_failure_msg "Backup template not found: ${BACKUP_TEMPLATE}"
-        return 1
-    fi
+    # Template is now fixed: templates/backup_index.j2
+    # No need to choose based on MAJOR_VER
 
     shopt -s nullglob
     for file in "${BACKUP_DIR}/"*.tar*; do
@@ -79,16 +58,14 @@ generateBackupListing() {
         return 1
     fi
 
-    awk -v refresh="${BACKUP_REFRESH}" \
-        -v file_table="${BACKUP_FILE_TABLE}" \
-        -v version="${VTTCTL_VERSION}" '
-    {
-        gsub("{{BACKUP_REFRESH}}", refresh);
-        gsub("{{BACKUP_FILE_TABLE}}", file_table);
-        gsub("{{VTTCTL_VERSION}}", version);
-        print;
-    }
-    ' "${BACKUP_TEMPLATE}" > "${BACKUP_INDEX}" || {
+    # Use Python template renderer instead of awk
+    python3 "${VTT_HOME}/python/template_renderer.py" \
+        --template "${VTT_HOME}/templates/backup_index.j2" \
+        --output "${BACKUP_INDEX}" \
+        --var backup_refresh="${BACKUP_REFRESH}" \
+        --var backup_file_table="${BACKUP_FILE_TABLE}" \
+        --var vttctl_version="${VTTCTL_VERSION}" \
+        --var major_version="${MAJOR_VER}" || {
         log_failure_msg "Failed to write backup listing to ${BACKUP_INDEX}"
         return 1
     }

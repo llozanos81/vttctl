@@ -1,0 +1,36 @@
+# vttctl Commands Reference
+
+This document provides a detailed reference for all available `vttctl.sh` commands.
+
+## Command List
+
+{% for command in commands %}
+### `{{ command.name }}`
+**Description:** {{ command.description }}
+
+**Usage:**
+```
+{{ command.usage }}
+```
+
+{% if command.options %}
+**Options:**
+{% for option in command.options %}
+- `{{ option.flag }}`: {{ option.description }}
+{% endfor %}
+{% endif %}
+
+{% if command.examples %}
+**Examples:**
+{% for example in command.examples %}
+```
+{{ example }}
+```
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+
+## Getting Help
+
+Run `./vttctl.sh help` for a quick overview of commands and options.

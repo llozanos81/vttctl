@@ -23,6 +23,8 @@ RUN set -xe \
 
 FROM alpine:3.22
 ARG TIMEZONE
+ARG FOUNDRY_UID=3000
+ARG FOUNDRY_GID=3000
 WORKDIR /home/foundry/vtt
 
 # Install runtime dependencies only
@@ -31,9 +33,9 @@ RUN set -xe \
     && find / -name ".npmrc" -exec sed -i '/globalignorefile\|python/d' {} \; 2>/dev/null \
     && export \
     && apk add --no-cache --update shadow nodejs icu-data-full npm tzdata \
-    && addgroup -g 3000 -S foundry \
-    && adduser -g 3000 -S foundry -G foundry \
-    && usermod -u 3000 foundry \
+    && addgroup -g ${FOUNDRY_GID} -S foundry \
+    && adduser -g ${FOUNDRY_GID} -S foundry -G foundry \
+    && usermod -u ${FOUNDRY_UID} foundry \
     && npm install -g uuid@latest pm2 \
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \

@@ -1,13 +1,15 @@
 FROM alpine:3.14
 ARG BUILD_VER
 ARG TIMEZONE
+ARG FOUNDRY_UID=3000
+ARG FOUNDRY_GID=3000
 WORKDIR /home/foundry/vtt
 RUN set -xe \
     && export \
     && apk add --no-cache --update shadow nodejs npm tzdata \
-    && addgroup -g 3000 -S foundry \
-    && adduser -g 3000 -S foundry -G foundry \
-    && usermod -u 3000 foundry \
+    && addgroup -g ${FOUNDRY_GID} -S foundry \
+    && adduser -g ${FOUNDRY_GID} -S foundry -G foundry \
+    && usermod -u ${FOUNDRY_UID} foundry \
     && npm cache clean --force \
     && npm install -g npm@latest \
     && npm install -g uuid@latest \

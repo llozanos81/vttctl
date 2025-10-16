@@ -1,11 +1,8 @@
 # TODO v1.0
-- Redo help section
 - Integrate with Traefik
 - Add HTTPS support. (traefik?)
 - Add support for Amazon Linux 2
 - Restore any foundryvtt backup tar, tar.gz or tar.bz2 into vttctl structure.
-- Validate if downloaded file is actually the FoundryVTT NodeJS application
-- Add configuration Wizard for env file
 - Add upgrade VTT version option
 - Add security to /backups (.htaccess?)
 - Create a binary instead of a script
@@ -19,6 +16,8 @@
 - Validate if download Zip major version is vttctl supported
 - Fix network interface detection ./vttctl.sh info
 - Backup elapsed time at the end of the backup process
+- Add configuration Wizard for env file
+- Validate if downloaded file is actually the FoundryVTT NodeJS application
 - Backup page with fonts and CSS from v9, v10 and v11
 - Avoid building current or running version, use ./vttctl build --force to force running version rebuild
 - Add support for CentOS 7
@@ -32,6 +31,7 @@
 - Entrypoint for app container: FoundryVTT/docker-entrypoint.sh
 - Compose networks: frontend (external), backend (internal)
 - All Docker Compose commands are wrapped by vttctl.sh for correct env setup
+- Redo help section
 
 # DISCARDED
 - Add a flag for compression using 'gz' for backups, like './vttctl.sh backup -z'. It's not implemented because most of Foundry's assets are already compressed (webp, webm, ogg, mp3, jpg, etc.). Compressing them again would result in diminishing returns.
