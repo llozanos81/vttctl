@@ -1019,10 +1019,20 @@ case "$1" in
         ;;
   clean)
         if [[ $# -ge 2 && "$2" == "--all" ]]; then
+            read -p "Are you sure you want to clean ALL containers and volumes? This will permanently delete user data. (y/N): " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                log_failure_msg "Clean cancelled."
+                exit 1
+            fi
             log_daemon_msg "Removing all containers and volumes."
             docker compose -f "${DOCKER_COMPOSE_FILE}" down -v --remove-orphans
             log_end_msg $?
             exit
+        fi
+        read -p "Are you sure you want to clean the containers? This will stop and remove them. (y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            log_failure_msg "Clean cancelled."
+            exit 1
         fi
         log_daemon_msg "Removing containers."
         docker compose -f "${DOCKER_COMPOSE_FILE}" down --remove-orphans
