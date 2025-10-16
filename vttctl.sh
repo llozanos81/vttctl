@@ -502,7 +502,7 @@ Commands:
   start           Start FoundryVTT services (production and optionally dev)
   stop            Stop FoundryVTT services
   build           Build Docker images for FoundryVTT (interactive version selection)
-  backup          Create a backup of FoundryVTT user data
+  backup          Create a backup of FoundryVTT user data (--cleanup for interactive cleanup)
   restore         Restore FoundryVTT user data from backup (interactive)
   restoredev      Restore latest dev backup
   logs            Show logs (use --live for live logs)
@@ -576,6 +576,15 @@ case "$1" in
         if [[ -z "${STY:-}" && -z "${TMUX:-}" ]]; then
             log_failure_msg "Backups must be run inside tmux or screen. Aborting."
             exit 1
+        fi
+
+        if [[ "$2" == "--cleanup" ]]; then
+            log_daemon_msg "Starting interactive backup cleanup."
+            # Set MAJOR_VER for rebuild_metadata, default to 13
+            MAJOR_VER="${MAJOR_VER:-13}"
+            cleanup_backups "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}"
+            log_end_msg $?
+            exit
         fi
 
         IS_RUNNING=$($0 status --json=true | jq -r .running)

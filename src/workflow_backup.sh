@@ -92,6 +92,9 @@ generateBackupListing() {
         log_failure_msg "Failed to write backup listing to ${BACKUP_INDEX}"
         return 1
     }
+
+    # Ensure the index.html is readable by the web server
+    chmod 644 "${BACKUP_INDEX}" || log_warning_msg "Failed to set permissions on ${BACKUP_INDEX}"
 }
 
 create_backup()  {
@@ -214,6 +217,73 @@ rebuild_metadata() {
         return 1
     fi
 }
-        return 1
+
+cleanup_backups() {
+    local BACKUP_HOME="$1"
+    local WEB_PROTO="$2"
+    local FQDN="$3"
+    local VTT_HOME="$4"
+    local MAJOR_VER="$5"
+    local BACKUP_REFRESH="$6"
+    local VTTCTL_VERSION="$7"
+
+    local backups=()
+    local selected=()
+
+    # Collect .tar files, sorted by modification time (oldest first)
+    while IFS= read -r -d '' file; do
+        backups+=("$file")
+    done < <(find "$BACKUP_HOME" -name "*.tar" -type f -print0 | xargs -0 ls -t | tac | tr '\n' '\0')
+
+    if [[ ${#backups[@]} -eq 0 ]]; then
+        log_daemon_msg "No backups found to clean up."
+        return 0
     fi
+
+    echo "Select backups to delete (use space to select, enter to confirm):"
+    echo "Available backups (oldest first):"
+    for i in "${!backups[@]}"; do
+        basefile=$(basename "${backups[$i]}")
+        size=$(du -h "${backups[$i]}" | awk '{print $1}')
+        # Parse date from filename
+        raw_date=$(echo "$basefile" | grep -oP '(?<=-)(2\d{7})(?=\.)')
+        if [ -n "$raw_date" ]; then
+            formatted_date=$(date -d "$raw_date" +'%Y-%m-%d' 2>/dev/null || echo "$raw_date")
+        else
+            formatted_date="unknown"
+        fi
+        echo "$((i+1))) $basefile ($size) - $formatted_date"
+    done
+    echo "0) Cancel"
+
+    while true; do
+        read -p "Enter numbers separated by spaces (or 0 to cancel): " -a choices
+        selected=()
+        invalid=false
+        for choice in "${choices[@]}"; do
+            if [[ $choice == 0 ]]; then
+                echo "Cleanup canceled."
+                return 0
+            elif [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#backups[@]} )); then
+                selected+=("${backups[$((choice-1))]}")
+            else
+                echo "Invalid choice: $choice"
+                invalid=true
+                break
+            fi
+        done
+        if [[ $invalid == false ]]; then
+            break
+        fi
+    done
+
+    for file in "${selected[@]}"; do
+        basefile=$(basename "$file")
+        log_daemon_msg "Deleting: $basefile"
+        rm -f -- "$file"
+    done
+
+    # Rebuild metadata and listing after deletion
+    rebuild_metadata "${BACKUP_HOME}" "${WEB_PROTO}" "${FQDN}" "${VTT_HOME}" "${MAJOR_VER}" "${BACKUP_REFRESH}" "${VTTCTL_VERSION}" "false"
+    log_daemon_msg "Metadata and backup listing updated."
 }
