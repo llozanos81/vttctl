@@ -31,26 +31,20 @@ WORKDIR /home/foundry/vtt
 
 # Install runtime dependencies only
 RUN set -xe \
-    # Remove obsolete npmrc configs to avoid npm warnings
     && find / -name ".npmrc" -exec sed -i '/globalignorefile\|python/d' {} \; 2>/dev/null \
-    && export \
-{% if major_version|int >= 13 %}
-    && apk add --no-cache --update shadow nodejs icu-data-full npm tzdata jq \
-{% else %}
-    && apk add --no-cache --update shadow nodejs npm tzdata jq \
-{% endif %}
+    && apk add --no-cache --update shadow nodejs{% if major_version|int >= 13 %} icu-data-full{% endif %} npm tzdata jq \
     && addgroup -g ${FOUNDRY_GID} -S foundry \
     && adduser -g ${FOUNDRY_GID} -S foundry -G foundry \
     && usermod -u ${FOUNDRY_UID} foundry \
-{% if major_version|int >= 13 %}
+{% if major_version|int >= 13 -%}
     && npm install -g uuid@latest pm2 \
-{% else %}
+{%- else -%}
     && npm cache clean --force \
     && npm install -g npm@latest \
     && npm install -g uuid@latest \
     && npm install -g pm2 \
     && npm cache clean --force \
-{% endif %}
+{%- endif %}
     && apk del --no-cache npm shadow \
     && mkdir -p /home/foundry/userdata \
     && chown -R foundry:foundry /home/foundry/ \
@@ -64,14 +58,12 @@ COPY --chown=foundry:foundry ./${BUILD_VER}/ .
 {% endif %}
 USER foundry
 RUN set -xe \
-{% if major_version|int < 13 %}
-{% raw %}
+{% if major_version|int < 13 %}{% raw %}
     && sed -i 's/Update Software/Update Disabled/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"You may update your Foundry Virtual Tabletop software to a new version by checking for update on your preferred Software Update Channel."/"In app updates are disabled, please use VTTctl for updates and upgrades instead."/' /home/foundry/vtt/resources/app/public/lang/en.json \
     && sed -i 's/"Check For Update"/"In app updates are disabled, please use VTTctl for updates and upgrades instead."/' /home/foundry/vtt/resources/app/public/lang/en.json \    
     && sed -i 's/{{#unless updateButtonEnabled}}disabled{{/unless}}/disabled/' /home/foundry/vtt/resources/app/templates/setup/setup-config.html \    
-{% endraw %}
-{% endif %}
+{% endraw %}{% endif %}
     && chmod +x /home/foundry/vtt/docker-entrypoint.sh \
     && touch /home/foundry/.firstboot
 

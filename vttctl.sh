@@ -19,7 +19,7 @@ source "${VTT_HOME}/src/logging.sh"
 source "${VTT_HOME}/src/docker_helpers.sh"
 source "${VTT_HOME}/src/workflow_backup.sh"
 source "${VTT_HOME}/src/common.sh"
-# Future: source "${VTT_HOME}/src/workflow_build.sh"
+source "${VTT_HOME}/src/workflow_build.sh"
 # Future: source "${VTT_HOME}/src/workflow_restore.sh"
 
 # Check for required tools at the start and provide installation hints
@@ -918,6 +918,11 @@ For issues and contributions: https://github.com/lloZanos81/vttctl
 
 EOF
 }
+
+if [[ $# -eq 0 ]]; then
+    print_help
+    exit 0
+fi
 
 case "$1" in
   help|-h|--help)
