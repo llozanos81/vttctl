@@ -35,6 +35,8 @@ done
 # Set defaults for configurable variables
 FOUNDRY_UID=${FOUNDRY_UID:-3000}
 FOUNDRY_GID=${FOUNDRY_GID:-3000}
+DOCKER_COMPOSE_FILE="${VTT_HOME}/docker/docker-compose.yml"
+DOWNLOAD_HOME="${VTT_HOME}/downloads"
 
 # Use mktemp for temporary files
 function getVersion() {
@@ -389,7 +391,7 @@ print_numbered_list() {
 
 # Cleanup helper functions
 function cleanup_versions() {
-    local VALUE="$1"
+    local VALUE="${1:-}"
     # Build candidate lists
     DIR_VERSIONS=$(ls -ld "${VTT_HOME}/FoundryVTT/"*[0-9]* 2>/dev/null | awk '/^d/ {print $NF}' || true)
     IMG_VERSIONS=$(docker images -a | grep vtt | awk '{print $1":"$2}' 2>/dev/null | awk -F: '{print $2}' || true)
@@ -418,8 +420,13 @@ function cleanup_versions() {
     # Convert to array of version strings
     version_list=()
     for entry in ${BIGGEST}; do
-        version_list+=("$(basename "$entry")")
+        ver=$(parse_version "$entry" | cut -d'|' -f1)
+        if [[ -n "$ver" ]]; then
+            version_list+=("$ver")
+        fi
     done
+    # Remove duplicates
+    version_list=($(echo "${version_list[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
     pattern="^[0-9]{1,3}\.[0-9]{1,3}$"
     DEFAULT_VER=${DEFAULT_VER:-null}
@@ -1005,13 +1012,13 @@ case "$1" in
         fi
         ;;
   build)
-        if [[ "$2" == "--force" ]]; then
+        if [[ $# -ge 2 && "$2" == "--force" ]]; then
             FORCE_REBUILD=true
         fi
         build_image
         ;;
   clean)
-        if [[ "$2" == "--all" ]]; then
+        if [[ $# -ge 2 && "$2" == "--all" ]]; then
             log_daemon_msg "Removing all containers and volumes."
             docker compose -f "${DOCKER_COMPOSE_FILE}" down -v --remove-orphans
             log_end_msg $?
@@ -1022,18 +1029,15 @@ case "$1" in
         log_end_msg $?
         ;;
   cleanup)
-        if [[ "$2" == "--all" ]]; then
+        if [[ $# -ge 2 && "$2" == "--all" ]]; then
             log_daemon_msg "Removing all containers, volumes, images, binaries, and extracted folders."
             docker compose -f "${DOCKER_COMPOSE_FILE}" down -v --remove-orphans
             docker system prune -f
-            rm -rf "${VTT_HOME}/"*.tgz "${VTT_HOME}/"*.zip "${DOWNLOAD_HOME}" "${VTT_HOME}/"*/
+            rm -rf "${VTT_HOME}/"*.tgz "${VTT_HOME}/"*.zip "${DOWNLOAD_HOME}" "${VTT_HOME}/FoundryVTT/"*/
             log_end_msg $?
             exit
         fi
-        log_daemon_msg "Removing images, binaries, and extracted folders."
-        docker system prune -f
-        rm -rf "${VTT_HOME}/"*.tgz "${VTT_HOME}/"*.zip "${DOWNLOAD_HOME}" "${VTT_HOME}/"*/
-        log_end_msg $?
+        cleanup_versions
         ;;
   default)
         select_default_version

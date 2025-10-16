@@ -237,3 +237,15 @@
   [ "$status" -eq 0 ]
   [[ "$output" == *"Configuration not saved."* ]]
 }
+
+@test "clean command runs without error" {
+  run ./vttctl.sh clean
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Removing containers."* ]]
+}
+
+@test "clean --all command runs without error" {
+  run ./vttctl.sh clean --all
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Removing all containers and volumes."* ]]
+}
