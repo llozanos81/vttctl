@@ -35,9 +35,9 @@ RUN set -xe \
     && find / -name ".npmrc" -exec sed -i '/globalignorefile\|python/d' {} \; 2>/dev/null \
     && export \
 {% if major_version|int >= 13 %}
-    && apk add --no-cache --update shadow nodejs icu-data-full npm tzdata \
+    && apk add --no-cache --update shadow nodejs icu-data-full npm tzdata jq \
 {% else %}
-    && apk add --no-cache --update shadow nodejs npm tzdata \
+    && apk add --no-cache --update shadow nodejs npm tzdata jq \
 {% endif %}
     && addgroup -g ${FOUNDRY_GID} -S foundry \
     && adduser -g ${FOUNDRY_GID} -S foundry -G foundry \
