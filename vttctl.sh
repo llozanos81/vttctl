@@ -820,6 +820,177 @@ EOF
 }
 
 
+function upgrade_version() {
+    local target_version="$1"
+    if [[ -z "$target_version" ]]; then
+        log_failure_msg "Usage: $0 upgrade <version>"
+        return 1
+    fi
+
+    local ENV_FILE="${VTT_HOME}/.env"
+    if [[ -f "$ENV_FILE" ]]; then
+        source "$ENV_FILE"
+    fi
+
+    # Check if target version is higher than current
+    if [[ -n "$DEFAULT_VER" ]]; then
+        if ! [[ "$target_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            log_failure_msg "Invalid version format. Expected: major.minor"
+            return 1
+        fi
+        if [[ "$(printf '%s\n' "$target_version" "$DEFAULT_VER" | sort -V | head -n1)" == "$target_version" && "$target_version" != "$DEFAULT_VER" ]]; then
+            log_failure_msg "Target version $target_version is not higher than current default $DEFAULT_VER"
+            return 1
+        fi
+    fi
+
+    log_daemon_msg "Upgrading to FoundryVTT version $target_version..."
+
+    # Check if version is extracted
+    if [[ ! -d "${VTT_HOME}/FoundryVTT/${target_version}" ]]; then
+        log_failure_msg "Version $target_version not found. Please download and extract it first."
+        return 1
+    fi
+
+    # Build the image
+    export FORCE_REBUILD=false  # or true if needed
+    if ! build_image "$target_version"; then
+        log_failure_msg "Failed to build image for version $target_version"
+        return 1
+    fi
+
+    # Set as default
+    if [[ -f "$ENV_FILE" ]]; then
+        sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=${target_version}/" "$ENV_FILE"
+    else
+        echo "DEFAULT_VER=${target_version}" > "$ENV_FILE"
+    fi
+
+    # Restart services
+    if ! restart_services; then
+        log_failure_msg "Failed to restart services after upgrade"
+        return 1
+    fi
+
+    log_daemon_msg "Upgrade to $target_version completed successfully."
+}
+
+
+function restore_from_tar() {
+    local tar_file="$1"
+    if [[ -z "$tar_file" ]]; then
+        log_failure_msg "Usage: $0 restore-tar <path_to_tar_file>"
+        return 1
+    fi
+    if [[ ! -f "$tar_file" ]]; then
+        log_failure_msg "Tar file not found: $tar_file"
+        return 1
+    fi
+
+    local file_name=$(basename "$tar_file")
+    local dir_name=$(dirname "$tar_file")
+
+    log_daemon_msg "Restoring from $tar_file..."
+
+    # Determine compression and strip components
+    local tar_cmd="tar"
+    if [[ "$file_name" == *.tar.gz ]]; then
+        tar_cmd="tar -xzf"
+    elif [[ "$file_name" == *.tar.bz2 ]]; then
+        tar_cmd="tar -xjf"
+    elif [[ "$file_name" == *.tar ]]; then
+        tar_cmd="tar -xf"
+    else
+        log_failure_msg "Unsupported file format. Supported: .tar, .tar.gz, .tar.bz2"
+        return 1
+    fi
+
+    # Extract to volume, assuming strip-components=1 for backups
+    docker run \
+        --rm \
+        -v foundryvtt_UserData:/source/ \
+        -v "$dir_name":/backup \
+        busybox \
+        ash -c "$tar_cmd /backup/${file_name} -C /source/ --strip-components=1; \
+                chown -R ${FOUNDRY_UID}:${FOUNDRY_GID} /source/"
+
+    log_daemon_msg "Restore from tar completed."
+}
+
+
+function restore_backup() {
+    log_daemon_msg "Restoring from latest backup..."
+    prodLatestRestore
+    log_daemon_msg "Restore completed."
+}
+
+
+function select_default_version() {
+    local VTT_HOME="${VTT_HOME:-$(pwd)}"
+    local FOUNDRY_JSON="${VTT_HOME}/FoundryVTT/foundryvtt.json"
+    local ENV_FILE="${VTT_HOME}/.env"
+
+    # Source .env for current DEFAULT_VER
+    if [[ -f "$ENV_FILE" ]]; then
+        source "$ENV_FILE"
+    fi
+
+    # Check if foundryvtt.json exists
+    if [[ ! -f "${FOUNDRY_JSON}" ]]; then
+        log_failure_msg "FoundryVTT configuration file not found: ${FOUNDRY_JSON}"
+        return 1
+    fi
+
+    # Parse available versions from extracted directories in FoundryVTT/
+    local json_content=$(cat "${FOUNDRY_JSON}")
+    local versions=()
+
+    for dir in "${VTT_HOME}/FoundryVTT/"*; do
+        if [[ -d "$dir" && $(basename "$dir") =~ ^[0-9]+\.[0-9]+$ ]]; then
+            local version=$(basename "$dir")
+            versions+=("$version")
+        fi
+    done
+
+    if [[ ${#versions[@]} -eq 0 ]]; then
+        log_failure_msg "No extracted FoundryVTT versions found in ${VTT_HOME}/FoundryVTT/"
+        return 1
+    fi
+
+    # Sort versions
+    IFS=$'\n' versions=($(sort -V <<<"${versions[*]}"))
+    unset IFS
+
+    # Interactive selection with color for current default
+    log_daemon_msg "Select FoundryVTT version to set as default:"
+    local i=1
+    for ver in "${versions[@]}"; do
+        if [[ "$ver" == "$DEFAULT_VER" ]]; then
+            echo -e "$i) \033[32m$ver (current default)\033[0m"
+        else
+            echo "$i) $ver"
+        fi
+        ((i++))
+    done
+    echo -n "Enter choice (1-${#versions[@]}): "
+    read -r choice
+    if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#versions[@]} )); then
+        local selected_version="${versions[$((choice-1))]}"
+        log_daemon_msg "Setting default version to: ${selected_version}"
+        # Update .env
+        if [[ -f "$ENV_FILE" ]]; then
+            sed -i "s/^DEFAULT_VER=.*/DEFAULT_VER=${selected_version}/" "$ENV_FILE"
+        else
+            echo "DEFAULT_VER=${selected_version}" > "$ENV_FILE"
+        fi
+        log_daemon_msg "Default version updated. Run 'restart' to apply changes."
+    else
+        log_failure_msg "Invalid selection."
+        return 1
+    fi
+}
+
+
 function print_help() {
     cat <<EOF
 vttctl.sh - FoundryVTT Docker Orchestration Utility
@@ -845,8 +1016,10 @@ CORE COMMANDS:
 MANAGEMENT COMMANDS:
     backup          Create backup of FoundryVTT user data (--cleanup for cleanup)
     restore         Restore user data from backup (interactive selection)
+    restore-tar <file> Restore user data from external tar file (.tar, .tar.gz, .tar.bz2)
     restoredev      Restore latest development backup
     default         Set default FoundryVTT version (interactive)
+    upgrade <ver>   Upgrade to higher FoundryVTT version (build + default + restart)
     clean           Remove Docker containers (--all removes user data volumes)
     cleanup         Remove Docker images, binaries, and extracted folders
 
@@ -1017,10 +1190,13 @@ case "$1" in
         fi
         ;;
   build)
+        local build_version=""
         if [[ $# -ge 2 && "$2" == "--force" ]]; then
             FORCE_REBUILD=true
+        elif [[ $# -ge 2 && "$2" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            build_version="$2"
         fi
-        build_image
+        build_image "$build_version"
         ;;
   clean)
         if [[ $# -ge 2 && "$2" == "--all" ]]; then
@@ -1096,6 +1272,13 @@ case "$1" in
   restore)
         restore_backup
         ;;
+  restore-tar)
+        if [[ -z "${2:-}" ]]; then
+            log_failure_msg "Usage: $0 restore-tar <path_to_tar_file>"
+            exit 1
+        fi
+        restore_from_tar "$2"
+        ;;
   restoredev)
         restore_dev_backup
         ;;
@@ -1112,6 +1295,13 @@ case "$1" in
   stop)
         stop_services
         ;;
+  upgrade)
+        if [[ -z "${2:-}" ]]; then
+            log_failure_msg "Usage: $0 upgrade <version>"
+            exit 1
+        fi
+        upgrade_version "$2"
+        ;;
   validate)
         validate_setup
         ;;
@@ -1122,7 +1312,7 @@ case "$1" in
       run_config_wizard
       ;;
   *)
-        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload|wizard|help}"
+        log_failure_msg "Usage: $0 {start|stop|logs|clean|cleanup|build|status|monitor|restart|reload|force-reload|wizard|upgrade|restore-tar|help}"
         log_failure_msg "Run '$0 help' for detailed usage and options."
         exit 1
         ;;

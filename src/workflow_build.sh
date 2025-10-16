@@ -4,6 +4,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 build_image() {
+    local target_version="${1:-}"
     local FORCE_REBUILD="${FORCE_REBUILD:-false}"
     local VTT_HOME="${VTT_HOME:-$(pwd)}"
     local FOUNDRY_JSON="${VTT_HOME}/FoundryVTT/foundryvtt.json"
@@ -60,28 +61,47 @@ build_image() {
         return 1
     fi
 
-    # Interactive selection with color for default
-    log_daemon_msg "Select FoundryVTT version to build:"
-    local i=1
-    for ver in "${versions[@]}"; do
-        if [[ "$ver" == "$DEFAULT_VER" ]]; then
-            echo -e "$i) \033[32m$ver (default)\033[0m"
-        else
-            echo "$i) $ver"
+    # If target_version is specified, use it, else interactive
+    local version
+    if [[ -n "$target_version" ]]; then
+        # Check if target_version is in versions
+        local found=false
+        for v in "${versions[@]}"; do
+            if [[ "$v" == "$target_version" ]]; then
+                found=true
+                version="$target_version"
+                break
+            fi
+        done
+        if [[ "$found" != true ]]; then
+            log_failure_msg "Version $target_version not found in extracted versions."
+            return 1
         fi
-        ((i++))
-    done
-    echo -n "Enter choice (1-${#versions[@]}): "
-    read -r choice
-    if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#versions[@]} )); then
-        version="${versions[$((choice-1))]}"
-        major=${version%%.*}
-        nodejs_version=${major_to_nodejs[$major]}
-        alpine_version=${major_to_alpine[$major]}
     else
-        log_failure_msg "Invalid selection."
-        return 1
+        # Interactive selection with color for default
+        log_daemon_msg "Select FoundryVTT version to build:"
+        local i=1
+        for ver in "${versions[@]}"; do
+            if [[ "$ver" == "$DEFAULT_VER" ]]; then
+                echo -e "$i) \033[32m$ver (default)\033[0m"
+            else
+                echo "$i) $ver"
+            fi
+            ((i++))
+        done
+        echo -n "Enter choice (1-${#versions[@]}): "
+        read -r choice
+        if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#versions[@]} )); then
+            version="${versions[$((choice-1))]}"
+        else
+            log_failure_msg "Invalid selection."
+            return 1
+        fi
     fi
+
+    local major=${version%%.*}
+    local nodejs_version=${major_to_nodejs[$major]}
+    local alpine_version=${major_to_alpine[$major]}
 
     log_daemon_msg "Selected version: ${version} (Node.js: ${nodejs_version}, Alpine: ${alpine_version})"
 

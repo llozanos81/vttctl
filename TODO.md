@@ -2,13 +2,13 @@
 - Integrate with Traefik
 - Add HTTPS support. (traefik?)
 - Add support for Amazon Linux 2
-- Restore any foundryvtt backup tar, tar.gz or tar.bz2 into vttctl structure.
-- Add upgrade VTT version option
 - Add security to /backups (.htaccess?)
 - Create a binary instead of a script
 - Integrate with bash autocomplete
 
 # DONE
+- Restore any foundryvtt backup tar, tar.gz or tar.bz2 into vttctl structure.
+- Add upgrade VTT version option
 - Restore vttctl generated backups
 - Change logging, drop use of lsb functions
 - Create Public URL for created backup using ./vttctl.sh backup
