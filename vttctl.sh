@@ -20,6 +20,7 @@ source "${VTT_HOME}/src/docker_helpers.sh"
 source "${VTT_HOME}/src/workflow_backup.sh"
 source "${VTT_HOME}/src/common.sh"
 source "${VTT_HOME}/src/workflow_build.sh"
+source "${VTT_HOME}/src/normalize_json.sh"
 # Future: source "${VTT_HOME}/src/workflow_restore.sh"
 
 # Check for required tools at the start and provide installation hints
@@ -318,63 +319,30 @@ function get_status_json() {
     normalize_json "${json:-}"
 }
 
-# Normalize arbitrary JSON into canonical status schema.
-# Emits a compact JSON object with these fields:
-#   running (string|boolean), http (number), active (bool), version (string|null),
-#   world (string|null), system (string|null), timestamp (RFC3339 UTC string)
-function normalize_json() {
-    local input="${1:-}"
-    if [[ -z "${input}" ]]; then
-        # read from stdin if no arg provided
-        input=$(cat || true)
-    fi
-
-    # If input is not valid JSON, return a standard error object
-    if ! jq -e . >/dev/null 2>&1 <<<"${input}"; then
-        jq -n --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{running:"error",http:0,active:false,version:null,world:null,system:null,timestamp:$ts}'
-        return 0
-    fi
-
-    # Build canonical object from available fields
-    echo "${input}" | jq -c '{
-        running: (if has("running") then .running else (if has("ok") then .ok else "unknown" end) end),
-        http: (.http // 200),
-        active: (.active // false),
-        version: (.version // null),
-        world: (.world // null),
-        system: (.system // null),
-        timestamp: (.timestamp // (now | strftime("%Y-%m-%dT%H:%M:%SZ")))
-    }'
-}
 
 function get_status() {
-    json=$(getVersion)
-    if [[ -n "${json}" && $(jq -e . >/dev/null 2>&1 <<<"${json}"; echo $?) -eq 0 ]]; then
-        IS_RUNNING=$(jq -r .running <<<"${json}")
-        VERSION=$(jq -r .version <<<"${json}")
-        WORLD=$(jq -r .world <<<"${json}")
-        SYSTEM=$(jq -r .system <<<"${json}")
-
-        if [[ "$IS_RUNNING" == "true" || "$IS_RUNNING" == "ok" ]]; then
-            if [[ "$WORLD" == "inactive" || -z "$WORLD" || "$WORLD" == "null" ]]; then
-                log_daemon_msg "Foundry VTT v${VERSION} is running BUT world not active."
-                true
-                log_end_msg $?
-            else
-                log_daemon_msg "Foundry VTT v${VERSION} is running."
-                log_daemon_msg " System: ${SYSTEM}"
-                log_daemon_msg " World: ${WORLD//-/ }"
-                true
-                log_end_msg $?
-            fi
-        else
-            false
-            log_daemon_msg "Foundry VTT is not running."
-            log_end_msg $?
-        fi
-    else
+    json=$(get_status_json)
+    if [[ -z "${json}" ]] || ! jq -e . >/dev/null 2>&1 <<<"${json}"; then
         log_daemon_msg "Foundry VTT is not running."
-        log_end_msg $?
+        log_end_msg 1
+        return 1
+    fi
+
+    HTTP=$(jq -r '.http // 0' <<<"${json}")
+    ACTIVE=$(jq -r '.active // false' <<<"${json}")
+    VERSION=$(jq -r '.version // null' <<<"${json}")
+    WORLD=$(jq -r '.world // null' <<<"${json}")
+    SYSTEM=$(jq -r '.system // null' <<<"${json}")
+
+    # Only report if Foundry is running or not. Keep output minimal for 'status'.
+    if [[ "${HTTP}" -ge 200 && "${HTTP}" -lt 400 ]]; then
+        log_daemon_msg "Foundry VTT is running"
+        log_end_msg 0
+        return 0
+    else
+        log_daemon_msg "Foundry VTT is not running"
+        log_end_msg 1
+        return 1
     fi
 }
 

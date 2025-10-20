@@ -148,24 +148,23 @@ rebuild_metadata() {
     fi
 
     shopt -s nullglob
-    echo "{" > "${METADATA_FILE}"
-    local first_file=true
-
+    tmp_entries=$(mktemp)
+    >"${tmp_entries}"
     for filename in "${BACKUP_HOME}"*.tar "${BACKUP_HOME}"*.tar.gz "${BACKUP_HOME}"*.tar.bz2; do
         if [[ -f "${filename}" ]]; then
             basefile=$(basename "${filename}")
             IFS="|" read -r version date <<< "$(parse_version "$basefile")"
             size=$(stat -c "%s" "${filename}" 2>/dev/null || stat -f "%z" "${filename}")
             size_mb=$(awk -v size="${size}" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')
-            if [[ "${first_file}" == false ]]; then
-                echo "," >> "${METADATA_FILE}"
-            else
-                first_file=false
-            fi
-            echo "\"${date}\": { \"version\":\"${version}\", \"filename\":\"${WEB_PROTO}://${FQDN}/backups/${basefile}\", \"size\":\"${size_mb} MB\" }" >> "${METADATA_FILE}"
+            jq -n --arg date "${date}" --arg version "${version}" --arg filename "${WEB_PROTO}://${FQDN}/backups/${basefile}" --arg size "${size_mb} MB" '{date:$date,version:$version,filename:$filename,size:$size}' >> "${tmp_entries}"
         fi
     done
-    echo "}" >> "${METADATA_FILE}"
+    if [[ -s "${tmp_entries}" ]]; then
+        jq -n 'reduce inputs as $i ({}; . + {($i.date): {version:$i.version, filename:$i.filename, size:$i.size}})' "${tmp_entries}" > "${METADATA_FILE}"
+    else
+        echo '{}' > "${METADATA_FILE}"
+    fi
+    rm -f "${tmp_entries}"
     shopt -u nullglob
 
     # Regenerate HTML listing (uses generateBackupListing defined in same file)
