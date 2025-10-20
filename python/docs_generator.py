@@ -5,7 +5,6 @@ Generates command reference docs.
 """
 
 import os
-import json
 from jinja2 import Environment, FileSystemLoader
 
 def generate_docs():

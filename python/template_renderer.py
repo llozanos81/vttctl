@@ -4,7 +4,6 @@ Template renderer for vttctl using Jinja2.
 Renders templates with provided variables.
 """
 
-import sys
 import os
 import argparse
 from jinja2 import Environment, FileSystemLoader

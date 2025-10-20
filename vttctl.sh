@@ -47,11 +47,12 @@ function getVersion() {
         JSON=$(cat "$RESPONSE")
         if echo "$JSON" | jq -e . >/dev/null 2>&1; then
             echo "$JSON"
-        elif [ ! "$status" == "200" ]; then
-            echo "{ \"running\": \"error\", \"http\": $status }"
+        else
+            # Return canonical error JSON
+            jq -n --argjson http ${status} --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{running:"error",http:$http,active:false,version:null,world:null,system:null,timestamp:$ts}'
         fi
     else
-        echo "{ \"running\": \"error\", \"http\": $status }"
+        jq -n --argjson http ${status} --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{running:"error",http:$http,active:false,version:null,world:null,system:null,timestamp:$ts}'
     fi
 }
 
@@ -97,26 +98,27 @@ function prodBackup()  {
 
             shopt -s nullglob
 
-            echo "{" > "${METADATA_FILE}"
-
-            first_file=true
-
+            # Build metadata as a JSON object mapping date -> {version, filename, size}
+            tmp_entries=$(mktemp)
+            >"${tmp_entries}"
             for filename in "${BACKUP_HOME}"*.tar "${BACKUP_HOME}"*.tar.gz "${BACKUP_HOME}"*.tar.bz2; do
                 if [[ -f "${filename}" ]]; then
                     basefile=$(basename "${filename}")
                     IFS="|" read -r version date <<< "$(parse_version "$basefile")"
                     size=$(stat -c "%s" "${filename}")
                     size_mb=$(awk -v size="${size}" 'BEGIN{printf "%.0f", (size / 1024 / 1024) + 0.5}')
-                    if [[ "${first_file}" == false ]]; then
-                        echo "," >> "${METADATA_FILE}"
-                    else
-                        first_file=false
-                    fi
-                    echo "\"${date}\": { \"version\":\"${version}\", \"filename\":\"${WEB_PROTO}://${FQDN}/backups/${basefile}\", \"size\":\"${size_mb} MB\" }" >> "${METADATA_FILE}"
+                    # Emit one JSON object per line for jq to slurp
+                    jq -n --arg date "${date}" --arg version "${version}" --arg filename "${WEB_PROTO}://${FQDN}/backups/${basefile}" --arg size "${size_mb} MB" '{date:$date,version:$version,filename:$filename,size:$size}' >> "${tmp_entries}"
                 fi
             done
 
-            echo "}" >> "${METADATA_FILE}"
+            # Construct final metadata mapping date -> object
+            if [[ -s "${tmp_entries}" ]]; then
+                jq -n 'reduce inputs as $i ({}; . + {($i.date): {version:$i.version, filename:$i.filename, size:$i.size}})' "${tmp_entries}" > "${METADATA_FILE}"
+            else
+                echo '{}' > "${METADATA_FILE}"
+            fi
+            rm -f "${tmp_entries}"
 
             log_daemon_msg "   - ${BACKUP_FILE} backup file created."
 
@@ -255,8 +257,9 @@ function getReleases() {
     last_index=$((${#versions[@]} - 1))
     versions[${last_index}]=$(jq ".build[-1].latest=true" <<< "${versions[${last_index}]}")
 
-    json=$(jq -n "{\"versions\":[$(IFS=,; echo "${versions[*]}")]}" 2>/dev/null)
+    json=$(jq -n "{\"versions\":[$(IFS=,; echo "${versions[*]}")] }" 2>/dev/null)
 
+    # Write releases file (already structured). No additional normalization required
     echo "${json}" > "${file_path}"
 
 }
@@ -306,6 +309,73 @@ function isPlatformSupported() {
 function getWebStatus() {
       WEB_CONTAINER=$(docker container ls -a | awk '/vtt/ && /web/ {print $1}')
       docker exec -it ${WEB_CONTAINER} ash -c "curl http://localhost/basic_status"       
+}
+
+# Compatibility wrappers for status output
+function get_status_json() {
+    json=$(getVersion)
+    # Normalize and output canonical JSON schema
+    normalize_json "${json:-}"
+}
+
+# Normalize arbitrary JSON into canonical status schema.
+# Emits a compact JSON object with these fields:
+#   running (string|boolean), http (number), active (bool), version (string|null),
+#   world (string|null), system (string|null), timestamp (RFC3339 UTC string)
+function normalize_json() {
+    local input="${1:-}"
+    if [[ -z "${input}" ]]; then
+        # read from stdin if no arg provided
+        input=$(cat || true)
+    fi
+
+    # If input is not valid JSON, return a standard error object
+    if ! jq -e . >/dev/null 2>&1 <<<"${input}"; then
+        jq -n --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{running:"error",http:0,active:false,version:null,world:null,system:null,timestamp:$ts}'
+        return 0
+    fi
+
+    # Build canonical object from available fields
+    echo "${input}" | jq -c '{
+        running: (if has("running") then .running else (if has("ok") then .ok else "unknown" end) end),
+        http: (.http // 200),
+        active: (.active // false),
+        version: (.version // null),
+        world: (.world // null),
+        system: (.system // null),
+        timestamp: (.timestamp // (now | strftime("%Y-%m-%dT%H:%M:%SZ")))
+    }'
+}
+
+function get_status() {
+    json=$(getVersion)
+    if [[ -n "${json}" && $(jq -e . >/dev/null 2>&1 <<<"${json}"; echo $?) -eq 0 ]]; then
+        IS_RUNNING=$(jq -r .running <<<"${json}")
+        VERSION=$(jq -r .version <<<"${json}")
+        WORLD=$(jq -r .world <<<"${json}")
+        SYSTEM=$(jq -r .system <<<"${json}")
+
+        if [[ "$IS_RUNNING" == "true" || "$IS_RUNNING" == "ok" ]]; then
+            if [[ "$WORLD" == "inactive" || -z "$WORLD" || "$WORLD" == "null" ]]; then
+                log_daemon_msg "Foundry VTT v${VERSION} is running BUT world not active."
+                true
+                log_end_msg $?
+            else
+                log_daemon_msg "Foundry VTT v${VERSION} is running."
+                log_daemon_msg " System: ${SYSTEM}"
+                log_daemon_msg " World: ${WORLD//-/ }"
+                true
+                log_end_msg $?
+            fi
+        else
+            false
+            log_daemon_msg "Foundry VTT is not running."
+            log_end_msg $?
+        fi
+    else
+        log_daemon_msg "Foundry VTT is not running."
+        log_end_msg $?
+    fi
 }
 
 # Helper logging functions moved to src/logging.sh
@@ -575,8 +645,8 @@ function cleanup_backups() {
 }
 
 # Validate if environment is setted up
-if [[ ! -f ${ENV_FILE} &&  $1 != "validate" ]]; then
-      $0 validate
+if [[ ! -f ${ENV_FILE} &&  ${1:-} != "validate" ]]; then
+    $0 validate
 elif [ -f ${ENV_FILE} ]; then
       if [ "${USER}" != "root" ] && ! id -nG "${USER}" | grep -qw "docker"; then
             log_failure_msg "Do not run vttctl as root, add ${USER} to docker group."
@@ -1092,6 +1162,36 @@ For issues and contributions: https://github.com/lloZanos81/vttctl
 EOF
 }
 
+function show_info() {
+    json=$(getVersion)
+    if [[ ! -z "$json" ]]; then
+        if jq -e . >/dev/null 2>&1 <<<"$json"; then
+                IS_ACTIVE=$(echo $json | jq .active)
+                VERSION=$(echo $json | jq -r .version)
+                if [ "$IS_ACTIVE" = "true" ]; then
+                        WORLD=$(echo $json | jq -r .world)
+                        SYSTEM=$(echo $json | jq -r .system)
+                        log_daemon_msg "Foundry VTT v$VERSION is running."
+                        log_daemon_msg " System: ${SYSTEM}"
+                        log_daemon_msg " World: ${WORLD//-/ }"
+                        true
+                        log_end_msg $?
+                else
+                        log_daemon_msg "Foundry VTT v$VERSION is running BUT world not active."
+                        true
+                        log_end_msg $?
+                fi
+        else
+                false
+                log_daemon_msg "Foundry VTT is not running."
+                log_end_msg $?
+        fi
+    else
+        log_daemon_msg "Foundry VTT is not running."
+        log_end_msg $?
+    fi
+}
+
 if [[ $# -eq 0 ]]; then
     print_help
     exit 0
@@ -1120,7 +1220,7 @@ case "$1" in
             exit 1
         fi
 
-        if [[ "$2" == "--cleanup" ]]; then
+    if [[ "${2:-}" == "--cleanup" ]]; then
             log_daemon_msg "Starting interactive backup cleanup."
             # Set MAJOR_VER for rebuild_metadata, default to 13
             MAJOR_VER="${MAJOR_VER:-13}"
@@ -1191,15 +1291,15 @@ case "$1" in
         ;;
   build)
         local build_version=""
-        if [[ $# -ge 2 && "$2" == "--force" ]]; then
+        if [[ $# -ge 2 && "${2:-}" == "--force" ]]; then
             FORCE_REBUILD=true
-        elif [[ $# -ge 2 && "$2" =~ ^[0-9]+\.[0-9]+$ ]]; then
-            build_version="$2"
+        elif [[ $# -ge 2 && "${2:-}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            build_version="${2:-}"
         fi
         build_image "$build_version"
         ;;
   clean)
-        if [[ $# -ge 2 && "$2" == "--all" ]]; then
+    if [[ $# -ge 2 && "${2:-}" == "--all" ]]; then
             read -p "Are you sure you want to clean ALL containers and volumes? This will permanently delete user data. (y/N): " confirm
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
                 log_failure_msg "Clean cancelled."
@@ -1220,7 +1320,7 @@ case "$1" in
         log_end_msg $?
         ;;
   cleanup)
-        if [[ $# -ge 2 && "$2" == "--all" ]]; then
+    if [[ $# -ge 2 && "${2:-}" == "--all" ]]; then
             log_daemon_msg "Removing all containers, volumes, images, binaries, and extracted folders."
             docker compose -f "${DOCKER_COMPOSE_FILE}" down -v --remove-orphans
             docker system prune -f
@@ -1237,24 +1337,24 @@ case "$1" in
         output_diagnostics
         ;;
   download)
-        if [[ -z "$2" ]]; then
+        if [[ -z "${2:-}" ]]; then
             log_failure_msg "Usage: $0 download <TIMED_URL>"
             exit 1
         fi
-        download_foundry "$2"
+        download_foundry "${2:-}"
         ;;
   extract)
-        if [[ -z "$2" ]]; then
+        if [[ -z "${2:-}" ]]; then
             log_failure_msg "Usage: $0 extract <version>"
             exit 1
         fi
-        extract_foundry "$2"
+        extract_foundry "${2:-}"
         ;;
   info)
         show_info
         ;;
   logs)
-        if [[ "$2" == "--live" ]]; then
+        if [[ "${2:-}" == "--live" ]]; then
             docker compose -f "${DOCKER_COMPOSE_FILE}" logs -f
         else
             docker compose -f "${DOCKER_COMPOSE_FILE}" logs
@@ -1277,7 +1377,7 @@ case "$1" in
             log_failure_msg "Usage: $0 restore-tar <path_to_tar_file>"
             exit 1
         fi
-        restore_from_tar "$2"
+        restore_from_tar "${2:-}"
         ;;
   restoredev)
         restore_dev_backup
@@ -1286,7 +1386,7 @@ case "$1" in
         start_services
         ;;
   status)
-        if [[ "$2" == "--json=true" ]]; then
+        if [[ "${2:-}" == "--json=true" ]]; then
             get_status_json
         else
             get_status
@@ -1300,7 +1400,7 @@ case "$1" in
             log_failure_msg "Usage: $0 upgrade <version>"
             exit 1
         fi
-        upgrade_version "$2"
+        upgrade_version "${2:-}"
         ;;
   validate)
         validate_setup
