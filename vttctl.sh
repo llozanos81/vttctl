@@ -57,6 +57,45 @@ function getVersion() {
     fi
 }
 
+# Output diagnostics.json (from running app container) to stdout if available
+function output_diagnostics() {
+    # Find running app container
+    CONT_NAME=$(docker container ls -a --format "{{.ID}} {{.Names}} {{.Status}}" | awk '/vtt/ && /app/ {print $1; exit}')
+    if [[ -z "${CONT_NAME:-}" ]]; then
+        log_failure_msg "No running FoundryVTT app container found."
+        return 1
+    fi
+
+    # Candidate paths inside container where diagnostics.json may be located
+    CANDIDATES=("/home/foundry/userdata/Logs/diagnostics.json" "/home/foundry/userdata/diagnostics.json" "/home/foundry/userdata/diagnostics/diagnostics.json" "/home/foundry/diagnostics.json" "/usr/src/app/diagnostics.json" "/source/Logs/diagnostics.json")
+
+    for path in "${CANDIDATES[@]}"; do
+        if docker exec "${CONT_NAME}" test -f "${path}" >/dev/null 2>&1; then
+            # Output raw JSON to stdout and format with jq on host if available
+            if command -v jq >/dev/null 2>&1; then
+                docker exec "${CONT_NAME}" cat "${path}" | jq . || docker exec "${CONT_NAME}" cat "${path}"
+            else
+                docker exec "${CONT_NAME}" cat "${path}"
+            fi
+            return 0
+        fi
+    done
+
+    # If not found, attempt to create diagnostics using FoundryVTT's internal endpoint if available
+    if docker exec "${CONT_NAME}" test -x /usr/local/bin/pm2 >/dev/null 2>&1; then
+        # Try curl inside container to fetch /diagnostics (best-effort)
+        if docker exec "${CONT_NAME}" sh -c "command -v curl >/dev/null 2>&1"; then
+            if docker exec "${CONT_NAME}" sh -c "curl -sS --fail http://localhost:30000/diagnostics.json" >/dev/null 2>&1; then
+                docker exec "${CONT_NAME}" curl -sS http://localhost:30000/diagnostics.json || true
+                return 0
+            fi
+        fi
+    fi
+
+    log_failure_msg "diagnostics.json not found in container ${CONT_NAME}."
+    return 2
+}
+
 # Remove the local definition of generateBackupListing
 
 function progressCursor() {
