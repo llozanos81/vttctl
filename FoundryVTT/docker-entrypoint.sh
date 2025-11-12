@@ -98,17 +98,32 @@ validate_variables() {
 # Function to update FoundryVTT options.json
 update_options() {
     echo " - Updating FoundryVTT options..."
-    if [ ! -f "${OPTIONS_FILE}" ]; then
-        echo "Error: ${OPTIONS_FILE} does not exist."
-        exit 1
-    fi
+    local default_options='{
+  "dataPath": "/home/foundry/userdata",
+  "compressStatic": true,
+  "fullscreen": false,
+  "hostname": null,
+  "language": "en.core",
+  "port": 30000,
+  "proxyPort": null,
+  "proxySSL": false,
+  "routePrefix": null,
+  "updateChannel": "stable",
+  "upnp": null
+}'
 
-    if ! jq --arg fqdn "${FQDN}" --arg port_str "${PROXY_PORT}" --arg upnp_str "${UPNP}" '.hostname = $fqdn | .proxyPort = ($port_str | tonumber) | .upnp = ($upnp_str == "true")' "${OPTIONS_FILE}" > "${OPTIONS_FILE}.tmp"; then
-        echo "Error: Failed to update options.json with jq."
-        exit 1
+    # Only update if file exists and is valid JSON
+    if [ -f "${OPTIONS_FILE}" ] && jq empty "${OPTIONS_FILE}" >/dev/null 2>&1; then
+        # Update only the known fields in existing valid JSON
+        if ! jq --arg fqdn "${FQDN}" --arg port_str "${PROXY_PORT}" --arg upnp_str "${UPNP}" '.hostname = $fqdn | .proxyPort = ($port_str | tonumber) | .upnp = ($upnp_str == "true")' "${OPTIONS_FILE}" > "${OPTIONS_FILE}.tmp"; then
+            echo " - Warning: Failed to update options.json, leaving existing file unchanged"
+        else
+            mv "${OPTIONS_FILE}.tmp" "${OPTIONS_FILE}"
+            echo " - Options update complete."
+        fi
+    else
+        echo " - Options file missing or corrupted, letting FoundryVTT create default configuration"
     fi
-    mv "${OPTIONS_FILE}.tmp" "${OPTIONS_FILE}"
-    echo " - Options update complete."
 }
 
 # Function to start FoundryVTT
@@ -141,9 +156,10 @@ validate_variables
 if [ -f "${FIRSTBOOT_FILE}" ]; then
     echo " - Firstboot!"
     rm -rf "${FIRSTBOOT_FILE}"
-else
-    update_options
 fi
+
+# Always update options on every container start
+update_options
 
 start_foundry
 echo "FoundryVTT startup process complete."

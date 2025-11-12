@@ -1,10 +1,25 @@
 # Docker/container helper functions for vttctl
 
-function stop() {
-    CONT_NAME=$(docker container ls -a | awk '/vtt/ && /app/ {print $1}')
-    docker exec -it ${CONT_NAME} pm2 stop all
-    VARS="" FQDN="" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
-    VARS="" FQDN="" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
+function start_services() {
+    VARS="${VARS}" TAG="${TAG}" FQDN="${FQDN}" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml up -d
+    # VARS="" TAG="${TAG}" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml up -d
+}
+
+function stop_services() {
+    # Stop PM2 processes in running FoundryVTT containers
+    for container in $(docker container ls -q --filter "name=app"); do
+        if docker exec "$container" pm2 list >/dev/null 2>&1; then
+            docker exec "$container" pm2 stop all
+        fi
+    done
+    VARS="${VARS}" TAG="${TAG}" FQDN="${FQDN}" docker-compose -p ${PROD_PROJECT} -f ${VTT_HOME}/docker/docker-compose.yml stop
+    # VARS="" TAG="${TAG}" docker-compose -p ${DEV_PROJECT} -f ${VTT_HOME}/docker/docker-compose-dev.yml stop
+}
+
+function restart_services() {
+    stop_services
+    sleep 2
+    start_services
 }
 
 function getLogs() {

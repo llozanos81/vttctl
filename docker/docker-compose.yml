@@ -12,7 +12,7 @@ services:
       restart: always
       environment:
        - VARS=${VARS}
-      image: foundryvtt:${TAG:-latest}
+      image: foundryvtt:${TAG}
       networks:
         - backend
       volumes:

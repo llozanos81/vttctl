@@ -678,6 +678,10 @@ else
       FQDN=${DOMAIN}
 fi
 
+# Create VARS with base64 encoded environment variables for the container
+VARS_DATA="FQDN=${FQDN}\nPROXY_PORT=${PROXY_PORT}\nUPNP=${UPNP}"
+VARS=$(echo -e "${VARS_DATA}" | base64 -w 0)
+
 if [[ ${SSL_ENABLED} == "true" ]]; then
       WEB_PROTO="https"
 else
@@ -1297,7 +1301,7 @@ case "$1" in
         fi
         ;;
   build)
-        local build_version=""
+        build_version=""
         if [[ $# -ge 2 && "${2:-}" == "--force" ]]; then
             FORCE_REBUILD=true
         elif [[ $# -ge 2 && "${2:-}" =~ ^[0-9]+\.[0-9]+$ ]]; then
@@ -1362,9 +1366,9 @@ case "$1" in
         ;;
   logs)
         if [[ "${2:-}" == "--live" ]]; then
-            docker compose -f "${DOCKER_COMPOSE_FILE}" logs -f
+            VARS="${VARS}" TAG="${TAG}" FQDN="${FQDN}" docker compose -p ${PROD_PROJECT} -f "${DOCKER_COMPOSE_FILE}" logs -f
         else
-            docker compose -f "${DOCKER_COMPOSE_FILE}" logs
+            VARS="${VARS}" TAG="${TAG}" FQDN="${FQDN}" docker compose -p ${PROD_PROJECT} -f "${DOCKER_COMPOSE_FILE}" logs
         fi
         ;;
   monitor)
