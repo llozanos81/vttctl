@@ -89,6 +89,9 @@ function download_foundry() {
     
     log_daemon_msg "Successfully downloaded and validated FoundryVTT ${VERSION}"
     log_daemon_msg "Saved as: $FINAL_NAME"
+    
+    # Automatically extract the downloaded file
+    extract_foundry "$VERSION"
 }
 
 function extract_foundry() {
@@ -180,6 +183,9 @@ function validate_foundryvtt_zip() {
             rm -rf "$TEMP_DIR"
             return 1
         fi
+        # If package.json is valid, assume it's a valid FoundryVTT application
+        rm -rf "$TEMP_DIR"
+        return 0
     else
         # Check if package.json exists anywhere in the zip
         if ! unzip -l "$ZIP_FILE" | grep -q "package.json"; then

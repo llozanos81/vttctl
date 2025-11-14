@@ -47,7 +47,7 @@ build_image() {
         # Now, find extracted versions in FoundryVTT/
     local versions=()
     for dir in "${VTT_HOME}/FoundryVTT/"*; do
-        if [[ -d "$dir" && $(basename "$dir") =~ ^[0-9]+\.[0-9]+$ ]]; then
+        if [[ -d "$dir" && $(basename "$dir") =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             local version=$(basename "$dir")
             local major=${version%%.*}
             if [[ -n "${major_to_nodejs[$major]}" ]]; then
@@ -80,6 +80,7 @@ build_image() {
     else
         # Interactive selection with color for default
         log_daemon_msg "Select FoundryVTT version to build:"
+        echo "0) Cancel"
         local i=1
         for ver in "${versions[@]}"; do
             if [[ "$ver" == "$DEFAULT_VER" ]]; then
@@ -89,10 +90,13 @@ build_image() {
             fi
             ((i++))
         done
-        echo -n "Enter choice (1-${#versions[@]}): "
+        echo -n "Enter choice (0-${#versions[@]}): "
         read -r choice
         if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#versions[@]} )); then
             version="${versions[$((choice-1))]}"
+        elif [[ $choice == 0 ]]; then
+            log_daemon_msg "Build cancelled."
+            return 0
         else
             log_failure_msg "Invalid selection."
             return 1
@@ -123,7 +127,10 @@ build_image() {
         --output "${DOCKERFILE_OUTPUT}" \
         --var major_version="${major}" \
         --var nodejs_version="${nodejs_version}" \
-        --var alpine_version="${alpine_version}"; then
+        --var alpine_version="${alpine_version}" \
+        --var full_version="${version}" \
+        --var generation_date="$(date +%Y-%m-%d)" \
+        --var generation_time="$(date +%H:%M:%S)"; then
         log_failure_msg "Failed to generate Dockerfile from template"
         return 1
     fi

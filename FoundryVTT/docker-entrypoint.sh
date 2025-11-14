@@ -68,7 +68,9 @@ setup_environment() {
         else
             echo "Warning: Skipping invalid variable pair: ${key}=${value}"
         fi
-    done <<< "${decoded_str}"
+    done <<EOF
+${decoded_str}
+EOF
     echo " - Environment setup complete."
 }
 

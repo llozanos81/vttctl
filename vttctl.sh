@@ -360,29 +360,26 @@ function get_status_json() {
 
 
 function get_status() {
-    json=$(get_status_json)
-    if [[ -z "${json}" ]] || ! jq -e . >/dev/null 2>&1 <<<"${json}"; then
-        log_daemon_msg "Foundry VTT is not running."
-        log_end_msg 1
-        return 1
-    fi
-
-    HTTP=$(jq -r '.http // 0' <<<"${json}")
-    ACTIVE=$(jq -r '.active // false' <<<"${json}")
-    VERSION=$(jq -r '.version // null' <<<"${json}")
-    WORLD=$(jq -r '.world // null' <<<"${json}")
-    SYSTEM=$(jq -r '.system // null' <<<"${json}")
-
-    # Only report if Foundry is running or not. Keep output minimal for 'status'.
-    if [[ "${HTTP}" -ge 200 && "${HTTP}" -lt 400 ]]; then
-        log_daemon_msg "Foundry VTT is running"
-        log_end_msg 0
-        return 0
-    else
-        log_daemon_msg "Foundry VTT is not running"
-        log_end_msg 1
-        return 1
-    fi
+    # Display system status information
+    log_daemon_msg "System Status:"
+    case "$OS_SUPPORT" in
+        "supported")
+            log_daemon_msg " OS: ${LINUX_DISTRO} ${DISTRO_VERSION} [${color_info}supported${color_reset}]"
+            ;;
+        "unsupported")
+            log_daemon_msg " OS: ${LINUX_DISTRO} ${DISTRO_VERSION} [${color_error}unsupported${color_reset}]"
+            ;;
+        "not tested")
+            log_daemon_msg " OS: ${LINUX_DISTRO} ${DISTRO_VERSION} [${color_warn}not tested${color_reset}]"
+            ;;
+    esac
+    log_daemon_msg " CPU Architecture: ${CPU_ARCH}"
+    log_daemon_msg " CPU Cores: ${CPU_COUNT}"
+    log_daemon_msg " RAM: ${TOTAL_RAM}"
+    log_daemon_msg " Local IP: ${LOCAL_IP}"
+    log_daemon_msg " Public IP: ${PUBLIC_IP}"
+    log_daemon_msg " Ethernet: ${ETHERNET}"
+    log_end_msg 0
 }
 
 # Helper logging functions moved to src/logging.sh
@@ -753,6 +750,39 @@ else
       CPU_ARCH=$(uname -m)
 fi
 
+# OS Support Status
+OS_SUPPORT="not tested"
+if [[ "$CPU_ARCH" == "x86_64" || "$CPU_ARCH" == "aarch64" ]]; then
+    case "$LINUX_DISTRO" in
+        "Ubuntu")
+            if [[ "$DISTRO_VERSION" =~ ^(20\.04|22\.04|24\.04)$ ]]; then
+                OS_SUPPORT="supported"
+            else
+                OS_SUPPORT="unsupported"
+            fi
+            ;;
+        "Debian")
+            if [[ "$DISTRO_VERSION" =~ ^(10|11|12)$ ]]; then
+                OS_SUPPORT="supported"
+            else
+                OS_SUPPORT="unsupported"
+            fi
+            ;;
+        "CentOS"|"Rocky Linux")
+            if [[ "$DISTRO_VERSION" =~ ^(7|8|9)$ ]]; then
+                OS_SUPPORT="supported"
+            else
+                OS_SUPPORT="unsupported"
+            fi
+            ;;
+        *)
+            OS_SUPPORT="not tested"
+            ;;
+    esac
+else
+    OS_SUPPORT="unsupported"
+fi
+
 function run_config_wizard() {
     echo "========================================"
     echo "  vttctl Configuration Wizard"
@@ -1027,7 +1057,7 @@ function select_default_version() {
     local versions=()
 
     for dir in "${VTT_HOME}/FoundryVTT/"*; do
-        if [[ -d "$dir" && $(basename "$dir") =~ ^[0-9]+\.[0-9]+$ ]]; then
+        if [[ -d "$dir" && $(basename "$dir") =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             local version=$(basename "$dir")
             versions+=("$version")
         fi
@@ -1053,9 +1083,13 @@ function select_default_version() {
         fi
         ((i++))
     done
-    echo -n "Enter choice (1-${#versions[@]}): "
+    echo -n "Enter choice (0 to cancel, 1-${#versions[@]}): "
     read -r choice
-    if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#versions[@]} )); then
+    if [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 0 && choice <= ${#versions[@]} )); then
+        if [[ $choice -eq 0 ]]; then
+            log_daemon_msg "Selection cancelled."
+            return 1
+        fi
         local selected_version="${versions[$((choice-1))]}"
         log_daemon_msg "Setting default version to: ${selected_version}"
         # Update .env
@@ -1092,7 +1126,7 @@ CORE COMMANDS:
     build           Build Docker image for selected FoundryVTT version (interactive)
     start           Start FoundryVTT production services
     stop            Stop FoundryVTT services
-    info            Display system and FoundryVTT status information
+    info            Display FoundryVTT status information
 
 MANAGEMENT COMMANDS:
     backup          Create backup of FoundryVTT user data (--cleanup for cleanup)
@@ -1109,7 +1143,7 @@ MONITORING & DIAGNOSTICS:
     web             Show Nginx web container status
     monitor         Attach to PM2 process monitor in running container
     diag            Output diagnostics.json from running container
-    status          Show JSON status of running FoundryVTT instance
+    status          Display system status information
 
 DEVELOPMENT & UTILITIES:
     extract <ver>   Extract downloaded FoundryVTT zip for specific version
